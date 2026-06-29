@@ -33,7 +33,10 @@ export async function runWorkExecution(
   }
 
   switch (workPlan.process) {
-    case 'ulysses': {
+    case 'ulysses':
+    case 'theseus':
+    case 'hephaestus':
+    case 'ariadne': {
       const res = await runUlysses(ctx, plan, workPlan);
       if (!res.ok) return res;
       await emitter.section(

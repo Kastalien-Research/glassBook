@@ -2,10 +2,29 @@ import { z } from 'zod';
 import { sh } from '../tools.mjs';
 import { runGates as runGatesPure, type ShRunner } from '../gates.mjs';
 import { runToolSubagent, runPlanSubagent, MAX_STEPS } from '../subagent.mjs';
-import { commitAll, headHash, isClean } from '../git.mjs';
+import {
+  checkout,
+  commitAll,
+  createBranch,
+  currentBranch,
+  headHash,
+  isClean,
+  mergeBranch,
+  restoreCheckpoint,
+} from '../git.mjs';
 import { budgetRemaining, consumeBudget, type SectionContext } from '../context.mjs';
 import type { Plan, WorkPlan, ExecutionResult, GateConditionSpec } from '../schemas.mjs';
 import { makeError, ok, type Result } from '../types.mjs';
+import { gateCodeSource } from '../notebook-code.mjs';
+import { executeNotebookCodeCell } from '../notebook-runtime.mjs';
+import { makeGlassbookCell } from '../cell.mjs';
+import {
+  makeBehavior,
+  runGamespace,
+  type Behavior,
+  type ForbiddenStore,
+  type TurnRecord,
+} from './kernel/index.mjs';
 
 /**
  * Ulysses Protocol engine (see workflows/ulysses.md).
@@ -30,6 +49,26 @@ interface GateResult {
   output: string;
 }
 
+function evaluatorDescription(gates: readonly GateConditionSpec[]): string {
+  return gates.map((g) => `${g.id}: ${g.description} (${g.command})`).join('\n');
+}
+
+function forbiddenPrompt(forbidden: ForbiddenStore, checkpoint: string): string[] {
+  return forbidden
+    .forCheckpoint(checkpoint)
+    .map((f) => `[step ${f.position}] signature ${f.signature}: ${f.reason}`);
+}
+
+function behaviorFor(turn: number, position: 1 | 2, intent: string, gate: GateConditionSpec) {
+  return makeBehavior({
+    id: `ulysses-t${turn}-step${position}`,
+    position,
+    intent,
+    evaluatorDescription: evaluatorDescription([gate]),
+    evaluatorGate: gate,
+  });
+}
+
 async function runGates(ctx: SectionContext, gates: GateConditionSpec[]): Promise<GateResult> {
   const run: ShRunner = (command) =>
     sh(command, { cwd: ctx.repoDir, timeoutMs: 300_000 }).then((r) => ({
@@ -38,6 +77,34 @@ async function runGates(ctx: SectionContext, gates: GateConditionSpec[]): Promis
     }));
   const outcome = await runGatesPure(gates, run);
   return { passed: outcome.passed, output: outcome.output };
+}
+
+async function emitGateCells(
+  ctx: SectionContext,
+  gates: GateConditionSpec[],
+  prefix: string,
+): Promise<GateResult> {
+  const output: string[] = [];
+  let passed = true;
+  const executeCodeCell =
+    ctx.notebookRuntime?.executeCodeCell ??
+    ((args: { readonly notebookDir: string; readonly filename: string }) =>
+      executeNotebookCodeCell(args));
+
+  for (const gate of gates) {
+    const filename = `${prefix}-${gate.id}.ts`;
+    await ctx.emitter.code(
+      filename,
+      gateCodeSource({ repoDir: ctx.repoDir, command: gate.command }),
+    );
+    const cell = await executeCodeCell({ notebookDir: ctx.emitter.dir, filename });
+    output.push(`# cell: ${filename} (${cell.passed ? 'PASS' : 'FAIL'})\n${cell.output}`);
+    if (!cell.passed) {
+      passed = false;
+    }
+  }
+
+  return { passed, output: output.join('\n\n') };
 }
 
 async function captureDiff(ctx: SectionContext): Promise<string> {
@@ -116,16 +183,6 @@ async function commitIfDirty(ctx: SectionContext, message: string): Promise<bool
   return false;
 }
 
-async function resetToLastCheckpoint(ctx: SectionContext): Promise<void> {
-  const last = ctx.state.checkpoints[ctx.state.checkpoints.length - 1];
-  if (last) {
-    await sh(`git reset --hard "${last}" && git clean -fd`, {
-      cwd: ctx.repoDir,
-      timeoutMs: 60_000,
-    });
-  }
-}
-
 export async function runUlysses(
   ctx: SectionContext,
   plan: Plan,
@@ -136,7 +193,6 @@ export async function runUlysses(
 
   const baseline = await headHash(ctx.repoDir);
   if (!baseline.ok) return baseline;
-  state.checkpoints.push(baseline.value);
   await emitter.markdown(
     `### Ulysses: Game Board Setup\n\nBaseline checkpoint: \`${baseline.value.slice(0, 10)}\`\n\nState step starts at 0.`,
   );
@@ -159,101 +215,204 @@ export async function runUlysses(
     });
   }
 
-  const forbidden: string[] = [];
-  let resolved = false;
   let lastFailure = initialGate.output;
-  let turn = 0;
+  let checkpointCalls = 0;
+  let lastResolvingBehavior: Behavior | undefined;
+  let activeTurnBranch: string | undefined;
+  let activeTurn: number | undefined;
 
-  while (budgetRemaining(state, 'workExecution') > 0 && !resolved) {
-    const turnBudget = consumeBudget(state, 'workExecution', 1);
-    if (!turnBudget.ok) break;
-    turn += 1;
-    logger.step(`Ulysses turn ${turn}`);
+  async function workingBranch(): Promise<string> {
+    if (state.workingBranch) return state.workingBranch;
+    const branch = await currentBranch(ctx.repoDir);
+    if (!branch.ok) throw new Error(branch.error.message);
+    state.workingBranch = branch.value;
+    return branch.value;
+  }
 
-    // Step 1: plot behaviors.
-    let primary: string;
-    let backup: string;
-    if (turn === 1) {
-      primary = workPlan.primaryHypothesis;
-      backup = workPlan.backupHypothesis;
-    } else {
-      const plotted = await runPlanSubagent({
-        schema: HypothesisSchema,
-        schemaName: 'Hypotheses',
+  const kernel = await runGamespace({
+    checkpoint: async () => {
+      if (checkpointCalls === 0) {
+        checkpointCalls += 1;
+        state.checkpoints.push(baseline.value);
+        return baseline.value;
+      }
+
+      checkpointCalls += 1;
+      const behavior = lastResolvingBehavior;
+      const message = behavior
+        ? `glassbook(ulysses): turn step ${behavior.position} — ${behavior.intent}`
+        : 'glassbook(ulysses): checkpoint';
+      const c = await checkpoint(ctx, message);
+      if (!c.ok) throw new Error(c.error.message);
+
+      if (!activeTurnBranch || activeTurn === undefined) {
+        return c.value;
+      }
+
+      const target = await workingBranch();
+      const checkedOut = await checkout(ctx.repoDir, target);
+      if (!checkedOut.ok) throw new Error(checkedOut.error.message);
+
+      const merged = await mergeBranch(
+        ctx.repoDir,
+        activeTurnBranch,
+        `glassbook(ulysses): merge Ulysses turn ${activeTurn}`,
+      );
+      if (!merged.ok) throw new Error(merged.error.message);
+
+      const mergedHead = await headHash(ctx.repoDir);
+      if (!mergedHead.ok) throw new Error(mergedHead.error.message);
+      state.checkpoints[state.checkpoints.length - 1] = mergedHead.value;
+      activeTurnBranch = undefined;
+      activeTurn = undefined;
+      return mergedHead.value;
+    },
+
+    restore: async (ref) => {
+      const restored = await restoreCheckpoint(ctx.repoDir, ref);
+      if (!restored.ok) throw new Error(restored.error.message);
+    },
+
+    plot: async ({ turn, fromCheckpoint, forbidden }) => {
+      const turnBudget = consumeBudget(state, 'workExecution', 1);
+      if (!turnBudget.ok) throw new Error(turnBudget.error.message);
+      logger.step(`Ulysses turn ${turn}`);
+
+      const target = await workingBranch();
+      const created = await createBranch(ctx.repoDir, `${target}-turn-${turn}`, fromCheckpoint);
+      if (!created.ok) throw new Error(created.error.message);
+      activeTurnBranch = created.value;
+      activeTurn = turn;
+
+      let primary: string;
+      let backup: string;
+      const forbiddenEntries = forbiddenPrompt(forbidden, fromCheckpoint);
+      if (turn === 1) {
+        primary = workPlan.primaryHypothesis;
+        backup = workPlan.backupHypothesis;
+      } else {
+        const plotted = await runPlanSubagent({
+          schema: HypothesisSchema,
+          schemaName: 'Hypotheses',
+          system:
+            'You are planning the next turn of the Ulysses Protocol. Propose a primary and a backup hypothesis for the next action. Avoid forbidden behaviors. Be concrete.',
+          prompt: [
+            `Objective: ${state.prompt}`,
+            `Goal: ${plan.goal}`,
+            `Most recent failure output:\n${lastFailure}`,
+            forbiddenEntries.length
+              ? `Forbidden behaviors:\n- ${forbiddenEntries.join('\n- ')}`
+              : '',
+          ]
+            .filter(Boolean)
+            .join('\n\n'),
+          role: 'hypothesis',
+          meter: ctx.meter,
+        });
+        if (!plotted.ok) throw new Error(plotted.error.message);
+        primary = plotted.value.primary;
+        backup = plotted.value.backup;
+      }
+
+      await emitter.markdown(
+        [
+          `## Ulysses turn ${turn}: Plot behaviors`,
+          '',
+          `- **Turn branch:** \`${created.value}\``,
+          `- **Merge target:** \`${target}\``,
+          `- **Step 1 (primary):** ${primary}`,
+          `- **Step 2 (backup):** ${backup}`,
+        ].join('\n'),
+      );
+
+      return {
+        primary: behaviorFor(turn, 1, primary, workPlan.primaryEvaluator),
+        backup: behaviorFor(turn, 2, backup, workPlan.backupEvaluator),
+      };
+    },
+
+    execute: async (behavior) => {
+      const stepLabel = `step ${behavior.position}`;
+      const r = await attempt(ctx, {
+        hypothesis: behavior.intent,
+        stepLabel,
+        plan,
+        forbidden: [],
+      });
+      if (!r.ok) throw new Error(r.error.message);
+
+      const diff = await captureDiff(ctx);
+      await emitter.markdown(`### Turn behavior · Step ${behavior.position} result\n\n${r.value}`);
+      await emitter.evidence(`Step ${behavior.position} diff`, 'diff', diff);
+      const behaviorGates = behavior.evaluatorGate ? [behavior.evaluatorGate] : gates;
+      const cellGate = await emitGateCells(ctx, behaviorGates, `ulysses-step-${behavior.position}`);
+      await emitter.evidence(
+        `Step ${behavior.position} executable gate cell`,
+        'text',
+        cellGate.output,
+      );
+      const gate = await runGates(ctx, behaviorGates);
+      const combinedGate = {
+        passed: cellGate.passed && gate.passed,
+        output: [cellGate.output, gate.output].filter(Boolean).join('\n\n'),
+      };
+      await emitter.evidence(`Step ${behavior.position} gate`, 'text', gate.output);
+      lastFailure = combinedGate.output;
+      state.glassbookCells.push(
+        makeGlassbookCell({
+          section: 'workExecution',
+          input: {
+            prompt: state.prompt,
+            goal: plan.goal,
+            behavior: behavior.intent,
+          },
+          processing: {
+            behaviorId: behavior.id,
+            position: behavior.position,
+            evaluator: behavior.evaluatorDescription,
+          },
+          output: {
+            passed: combinedGate.passed,
+            evidence: combinedGate.output,
+          },
+          gates: behaviorGates,
+        }),
+      );
+
+      if (combinedGate.passed) {
+        lastResolvingBehavior = behavior;
+        return { outcome: 'success', evidence: combinedGate.output };
+      }
+
+      return { outcome: 'failure', evidence: combinedGate.output };
+    },
+
+    consider: async (record: TurnRecord) => {
+      const primary = record.attempts.find((a) => a.position === 1)?.behavior.intent ?? '(none)';
+      const backup = record.attempts.find((a) => a.position === 2)?.behavior.intent ?? '(none)';
+      const consideration = await runToolSubagent({
         system:
-          'You are planning the next turn of the Ulysses Protocol. Propose a primary and a backup hypothesis for the next action. Avoid forbidden behaviors. Be concrete.',
-        prompt: [
-          `Objective: ${state.prompt}`,
-          `Goal: ${plan.goal}`,
-          `Most recent failure output:\n${lastFailure}`,
-          forbidden.length ? `Forbidden behaviors:\n- ${forbidden.join('\n- ')}` : '',
-        ]
-          .filter(Boolean)
-          .join('\n\n'),
+          'You are in Ulysses CONSIDERATION mode. The last two behaviors failed. Hypothesize WHY they failed and what category of approach should be tried next. Do not modify files; you may inspect them.',
+        prompt: `Objective: ${state.prompt}\n\nFailed step 1: ${primary}\nFailed step 2: ${backup}\n\nLatest gate output:\n${lastFailure}`,
+        tools: ctx.tools,
+        maxSteps: MAX_STEPS.hypothesis,
         role: 'hypothesis',
         meter: ctx.meter,
       });
-      if (!plotted.ok) return plotted;
-      primary = plotted.value.primary;
-      backup = plotted.value.backup;
-    }
+      const considerationText = consideration.ok
+        ? consideration.value.text
+        : `(consideration failed: ${consideration.error.message})`;
+      await emitter.markdown(
+        `### Turn ${record.turn} · CONSIDERATION (state step -1)\n\n${considerationText}\n\n_Forbidden behaviors updated; resetting to last checkpoint._`,
+      );
+      return { hypothesis: considerationText };
+    },
 
-    await emitter.markdown(
-      `## Ulysses turn ${turn}: Plot behaviors\n\n- **Step 1 (primary):** ${primary}\n- **Step 2 (backup):** ${backup}`,
-    );
+    budgetRemaining: () => budgetRemaining(state, 'workExecution'),
+  });
 
-    // Execute step 1.
-    const r1 = await attempt(ctx, { hypothesis: primary, stepLabel: 'step 1', plan, forbidden });
-    if (!r1.ok) return r1;
-    const diff1 = await captureDiff(ctx);
-    await emitter.markdown(`### Turn ${turn} · Step 1 result\n\n${r1.value}`);
-    await emitter.evidence(`Turn ${turn} · Step 1 diff`, 'diff', diff1);
-    const gate1 = await runGates(ctx, gates);
-    await emitter.evidence(`Turn ${turn} · Step 1 gate`, 'text', gate1.output);
-
-    if (gate1.passed) {
-      const c = await checkpoint(ctx, `glassbook(ulysses): turn ${turn} step 1 — ${primary}`);
-      if (!c.ok) return c;
-      resolved = true;
-      break;
-    }
-
-    // Execute step 2 (backup).
-    const r2 = await attempt(ctx, { hypothesis: backup, stepLabel: 'step 2', plan, forbidden });
-    if (!r2.ok) return r2;
-    const diff2 = await captureDiff(ctx);
-    await emitter.markdown(`### Turn ${turn} · Step 2 result\n\n${r2.value}`);
-    await emitter.evidence(`Turn ${turn} · Step 2 diff`, 'diff', diff2);
-    const gate2 = await runGates(ctx, gates);
-    await emitter.evidence(`Turn ${turn} · Step 2 gate`, 'text', gate2.output);
-
-    if (gate2.passed) {
-      const c = await checkpoint(ctx, `glassbook(ulysses): turn ${turn} step 2 — ${backup}`);
-      if (!c.ok) return c;
-      resolved = true;
-      break;
-    }
-
-    // CONSIDERATION (state step -1).
-    forbidden.push(`[step 1] ${primary}`, `[step 2] ${backup}`);
-    lastFailure = gate2.output;
-    const consideration = await runToolSubagent({
-      system:
-        'You are in Ulysses CONSIDERATION mode. The last two behaviors failed. Hypothesize WHY they failed and what category of approach should be tried next. Do not modify files; you may inspect them.',
-      prompt: `Objective: ${state.prompt}\n\nFailed step 1: ${primary}\nFailed step 2: ${backup}\n\nLatest gate output:\n${gate2.output}`,
-      tools: ctx.tools,
-      maxSteps: MAX_STEPS.hypothesis,
-      role: 'hypothesis',
-      meter: ctx.meter,
-    });
-    const considerationText = consideration.ok
-      ? consideration.value.text
-      : `(consideration failed: ${consideration.error.message})`;
-    await emitter.markdown(
-      `### Turn ${turn} · CONSIDERATION (state step -1)\n\n${considerationText}\n\n_Forbidden behaviors updated; resetting to last checkpoint._`,
-    );
-    await resetToLastCheckpoint(ctx);
-  }
+  state.kernelTurns = kernel.turns;
+  state.forbiddenBehaviors = kernel.forbidden.toJSON();
 
   const finalGate = await runGates(ctx, gates);
   // Safety net: if the gates pass but something is still uncommitted, commit it
@@ -262,9 +421,9 @@ export async function runUlysses(
     await commitIfDirty(ctx, 'glassbook(ulysses): commit final verified state');
   }
   const execution: ExecutionResult = {
-    desiredStateAchieved: finalGate.passed && (resolved || ctx.state.checkpoints.length > 1),
-    evidence: resolved
-      ? `Resolved after ${turn} Ulysses turn(s).`
+    desiredStateAchieved: finalGate.passed && (kernel.resolved || ctx.state.checkpoints.length > 1),
+    evidence: kernel.resolved
+      ? `Resolved after ${kernel.turns.length} Ulysses turn(s).`
       : `Did not reach the desired state within the turn budget (${state.budgets.workExecution.limit}).`,
     testOutput: finalGate.output,
   };
@@ -273,7 +432,7 @@ export async function runUlysses(
     state.failures.push(
       makeError(
         'ConsiderationExhausted',
-        `Ulysses exhausted its turn budget without achieving the desired state after ${turn} turn(s).`,
+        `Ulysses exhausted its turn budget without achieving the desired state after ${kernel.turns.length} turn(s).`,
       ),
     );
   }

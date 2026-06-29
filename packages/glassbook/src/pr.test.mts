@@ -63,4 +63,54 @@ describe('buildPrBody', () => {
     expect(body).toContain('**Evaluation:** approve (reward hacking: false)');
     expect(body).toContain('genuine fix');
   });
+
+  it('renders run-derived audit details', () => {
+    const s = baseState();
+    s.plan = {
+      goal: 'make tests deterministic',
+      successCriteria: ['tests pass'],
+      finalGates: [{ id: 'tests', description: 'test suite', command: 'npm test' }],
+      assumptions: ['repo starts clean'],
+      risks: ['network unavailable'],
+    };
+    s.research = {
+      knownBeforeWork: [
+        { question: 'How to test?', answer: 'Run npm test', source: 'package.json' },
+      ],
+      unknowableBeforeWork: [],
+      summary: 'The package uses npm test.',
+    };
+    s.execution = {
+      desiredStateAchieved: true,
+      evidence: 'Resolved after 1 turn.',
+      testOutput: 'PASS',
+    };
+    s.evaluation = {
+      verdict: 'approve',
+      rewardHackingDetected: false,
+      reasoning: 'diff and tests line up',
+      issues: [],
+    };
+    s.usage = {
+      totals: { calls: 2, inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      byRole: {},
+    };
+    s.kernelTurns = [{ turn: 1, fromCheckpoint: 'abc', attempts: [], transition: 'resolved' }];
+    s.glassbookCells.push({
+      section: 'workExecution',
+      input: { behavior: 'fix it' },
+      processing: { position: 1 },
+      output: { passed: true },
+      gates: [{ id: 'tests', description: 'test suite', command: 'npm test' }],
+    });
+
+    const body = buildPrBody(s);
+
+    expect(body).toContain('**Final gates:**');
+    expect(body).toContain('- `npm test` — test suite');
+    expect(body).toContain('**Research summary:** The package uses npm test.');
+    expect(body).toContain('**Kernel turns:** 1');
+    expect(body).toContain('**Typed cells:** 1');
+    expect(body).toContain('**Usage:** 2 call(s), 30 tokens');
+  });
 });

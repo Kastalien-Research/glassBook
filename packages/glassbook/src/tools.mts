@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import Path from 'node:path';
@@ -20,19 +20,58 @@ export interface ShResult {
   combined: string;
 }
 
+const SANDBOX_EXEC = '/usr/bin/sandbox-exec';
+
+export function isShellSandboxAvailable(): boolean {
+  if (!existsSync(SANDBOX_EXEC)) return false;
+  const probe = spawnSync(SANDBOX_EXEC, ['-p', '(version 1)\n(allow default)', 'true'], {
+    stdio: 'ignore',
+  });
+  return probe.status === 0;
+}
+
+function defaultShellEnv(): NodeJS.ProcessEnv {
+  return {
+    PATH: process.env.PATH,
+    HOME: process.env.HOME,
+    TMPDIR: process.env.TMPDIR,
+    TEMP: process.env.TEMP,
+    TMP: process.env.TMP,
+    USER: process.env.USER,
+    SHELL: process.env.SHELL,
+    CI: process.env.CI,
+    NODE_ENV: process.env.NODE_ENV,
+  };
+}
+
 /**
  * Run a shell command. The single primitive every other tool and the git
  * layer build on. Always scoped to a cwd; never inherits a TTY.
  */
 export function sh(
   command: string,
-  opts: { cwd: string; timeoutMs?: number; env?: NodeJS.ProcessEnv },
+  opts: { cwd: string; timeoutMs?: number; env?: NodeJS.ProcessEnv; sandbox?: boolean },
 ): Promise<ShResult> {
   return new Promise((resolve) => {
-    const child = spawn('bash', ['-lc', command], {
-      cwd: opts.cwd,
-      env: opts.env ?? process.env,
-    });
+    if (opts.sandbox === true && !isShellSandboxAvailable()) {
+      resolve({
+        code: 126,
+        stdout: '',
+        stderr: 'shell sandbox is not available on this host',
+        combined: 'shell sandbox is not available on this host',
+      });
+      return;
+    }
+
+    const sandboxed = opts.sandbox === true;
+    const child = spawn(
+      sandboxed ? SANDBOX_EXEC : 'bash',
+      shellArgs(command, opts.cwd, sandboxed),
+      {
+        cwd: opts.cwd,
+        env: { ...defaultShellEnv(), ...(opts.env ?? {}) },
+      },
+    );
 
     let stdout = '';
     let stderr = '';
@@ -65,6 +104,38 @@ export function sh(
   });
 }
 
+function shellArgs(command: string, cwd: string, sandboxed: boolean): string[] {
+  if (!sandboxed) return ['-lc', command];
+  return ['-p', shellSandboxProfile(cwd), 'bash', '-lc', command];
+}
+
+function shellSandboxProfile(repoDir: string): string {
+  const repo = Path.resolve(repoDir);
+  return [
+    '(version 1)',
+    '(deny default)',
+    '(allow process*)',
+    '(allow sysctl-read)',
+    '(allow file-read-metadata)',
+    systemReadRule('/bin'),
+    systemReadRule('/usr'),
+    systemReadRule('/System'),
+    systemReadRule('/Library'),
+    `(allow file-read* (subpath ${profileString(repo)}))`,
+    `(allow file-write* (subpath ${profileString(repo)}))`,
+    '(allow file-read* (literal "/dev/null"))',
+    '(allow file-write* (literal "/dev/null"))',
+  ].join('\n');
+}
+
+function systemReadRule(path: string): string {
+  return `(allow file-read* (subpath ${profileString(path)}))`;
+}
+
+function profileString(value: string): string {
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
 function resolveInRepo(repoDir: string, p: string): string {
   return Path.isAbsolute(p) ? p : Path.resolve(repoDir, p);
 }
@@ -81,11 +152,34 @@ export function detectInstallCommand(repoDir: string): string | null {
   return null;
 }
 
+export function isAllowedWebFetchUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
+  const host = parsed.hostname.toLowerCase();
+  if (host === 'localhost' || host === '::1') return false;
+  if (host.startsWith('127.')) return false;
+  if (host.startsWith('10.')) return false;
+  if (host.startsWith('192.168.')) return false;
+
+  const parts = host.split('.');
+  const first = Number(parts[0]);
+  const second = Number(parts[1]);
+  if (first === 172 && Number.isInteger(second) && second >= 16 && second <= 31) return false;
+
+  return true;
+}
+
 /**
  * Build the tool set exposed to tool-using subagents. All tools are scoped to
  * the target repository directory.
  */
-export function makeTools(repoDir: string) {
+export function makeTools(repoDir: string, sessionEnv: Readonly<Record<string, string>> = {}) {
   return {
     readFile: tool({
       description: 'Read a UTF-8 text file from the repository.',
@@ -141,7 +235,12 @@ export function makeTools(repoDir: string) {
         command: z.string().describe('The shell command to execute.'),
       }),
       execute: async ({ command }) => {
-        const res = await sh(command, { cwd: repoDir, timeoutMs: 300_000 });
+        const res = await sh(command, {
+          cwd: repoDir,
+          timeoutMs: 300_000,
+          env: sessionEnv,
+          sandbox: true,
+        });
         return `exit_code: ${res.code}\n${truncate(res.combined)}`;
       },
     }),
@@ -170,6 +269,9 @@ export function makeTools(repoDir: string) {
         url: z.string().url().describe('The URL to fetch.'),
       }),
       execute: async ({ url }) => {
+        if (!isAllowedWebFetchUrl(url)) {
+          return `ERROR fetching ${url}: URL is blocked by the webFetch sandbox policy`;
+        }
         try {
           const res = await fetch(url);
           const text = await res.text();

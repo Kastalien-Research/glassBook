@@ -6,6 +6,7 @@ import { Command } from 'commander';
 import { runGlassbook } from '../src/orchestrator.mjs';
 import { createLogger } from '../src/logger.mjs';
 import { getTemplate, codebaseUpdateTemplate } from '../src/templates/codebase-update.mjs';
+import { replayRun } from '../src/replay.mjs';
 import type { RunConfig } from '../src/types.mjs';
 
 interface RunOptions {
@@ -119,6 +120,26 @@ program
       logger.error(`unexpected error: ${e instanceof Error ? e.message : String(e)}`);
       process.exit(1);
     }
+  });
+
+program
+  .command('replay')
+  .description('Replay the saved final gates from a glassBook glassbook.json sidecar')
+  .argument('<glassbook-json>', 'path to glassbook.json')
+  .action(async (sidecarPath: string) => {
+    const result = await replayRun(Path.resolve(sidecarPath));
+    process.stdout.write(`${result.output}\n`);
+    process.exit(result.passed ? 0 : 1);
+  });
+
+program
+  .command('replay-evaluation')
+  .description('Replay the saved evaluation gates from a glassBook glassbook.json sidecar')
+  .argument('<glassbook-json>', 'path to glassbook.json')
+  .action(async (sidecarPath: string) => {
+    const result = await replayRun(Path.resolve(sidecarPath));
+    process.stdout.write(`${result.output}\n`);
+    process.exit(result.passed ? 0 : 1);
   });
 
 program.parseAsync(process.argv).catch((e) => {

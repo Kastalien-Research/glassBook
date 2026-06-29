@@ -1,4 +1,4 @@
-import { generateText, generateObject, stepCountIs } from 'ai';
+import { generateText, Output, stepCountIs } from 'ai';
 import type { ToolSet } from 'ai';
 import type { z } from 'zod';
 import { getModel } from '@srcbook/api/headless';
@@ -65,17 +65,16 @@ export async function runPlanSubagent<T>(
     const model = await getModel({ model: resolveModelId(args.role) });
     const result = await withRetry(
       () =>
-        generateObject({
+        generateText({
           model,
-          schema: args.schema,
-          schemaName: args.schemaName,
+          output: Output.object({ schema: args.schema, name: args.schemaName }),
           system: args.system,
           prompt: args.prompt,
         }),
       { retries: args.retries },
     );
     args.meter?.record(args.role ?? 'planner', result.usage as TokenUsageLike);
-    return ok(result.object as T);
+    return ok(result.output as T);
   } catch (e) {
     return err(makeError('SubagentError', `planning subagent failed: ${msg(e)}`, e));
   }

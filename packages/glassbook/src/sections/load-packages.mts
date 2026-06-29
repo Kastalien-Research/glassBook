@@ -6,7 +6,7 @@ import {
   createBranch,
   isClean,
 } from '../git.mjs';
-import type { SectionContext } from '../context.mjs';
+import { consumeBudget, type SectionContext } from '../context.mjs';
 import { makeError, ok, err, type Result } from '../types.mjs';
 
 /**
@@ -18,6 +18,9 @@ import { makeError, ok, err, type Result } from '../types.mjs';
 export async function runLoadPackages(ctx: SectionContext): Promise<Result<void>> {
   const { state, emitter, logger, repoDir, config } = ctx;
   logger.section('1 · Load packages / Game board setup');
+
+  const budget = consumeBudget(state, 'loadPackages', 1);
+  if (!budget.ok) return budget;
 
   const repoOk = await ensureGitRepo(repoDir);
   if (!repoOk.ok) return repoOk;

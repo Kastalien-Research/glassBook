@@ -53,13 +53,26 @@ export async function createBranch(
   name: string,
   fromRef?: string,
 ): Promise<Result<string>> {
-  const r = await git(repoDir, `checkout -b "${name}"${fromRef ? ` "${fromRef}"` : ''}`);
-  if (!r.ok) return r;
-  return ok(name);
+  for (let attempt = 1; attempt <= 10; attempt++) {
+    const candidate = attempt === 1 ? name : `${name}-${attempt}`;
+    const r = await git(repoDir, `checkout -b "${candidate}"${fromRef ? ` "${fromRef}"` : ''}`);
+    if (r.ok) return ok(candidate);
+    if (!r.error.message.includes('already exists')) return r;
+  }
+  return err(makeError('GitError', `could not create an available branch for ${name}`));
 }
 
 export function checkout(repoDir: string, ref: string): Promise<Result<string>> {
   return git(repoDir, `checkout "${ref}"`);
+}
+
+export function mergeBranch(
+  repoDir: string,
+  branch: string,
+  message: string,
+): Promise<Result<string>> {
+  const safeMessage = message.replace(/"/g, '\\"');
+  return git(repoDir, `merge --no-ff "${branch}" -m "${safeMessage}"`);
 }
 
 export async function commitAll(repoDir: string, message: string): Promise<Result<string>> {
@@ -77,8 +90,71 @@ export async function commitAll(repoDir: string, message: string): Promise<Resul
   return headHash(repoDir);
 }
 
-export function pushBranch(repoDir: string, branch: string): Promise<Result<string>> {
+export async function pushBranch(repoDir: string, branch: string): Promise<Result<string>> {
+  const pushed = await git(repoDir, `push -u origin "${branch}"`);
+  if (pushed.ok) return pushed;
+  if (!isPushConflict(pushed.error.message)) return pushed;
+
+  const fetched = await git(repoDir, `fetch origin "${branch}"`);
+  if (!fetched.ok) return fetched;
+
+  const rebased = await git(repoDir, `rebase "origin/${branch}"`);
+  if (!rebased.ok) {
+    await git(repoDir, 'rebase --abort');
+    return err(
+      makeError(
+        'GitError',
+        [
+          `push rejected because origin/${branch} moved, and automatic rebase failed.`,
+          'Resolve the rebase locally, then rerun the glassBook push/PR step.',
+          rebased.error.message,
+        ].join('\n'),
+      ),
+    );
+  }
+
   return git(repoDir, `push -u origin "${branch}"`);
+}
+
+function isPushConflict(message: string): boolean {
+  return [
+    'non-fast-forward',
+    'fetch first',
+    'rejected',
+    'stale info',
+    'failed to push some refs',
+  ].some((needle) => message.toLowerCase().includes(needle));
+}
+
+async function untrackedFiles(repoDir: string): Promise<Result<string[]>> {
+  const result = await git(repoDir, 'ls-files --others --exclude-standard');
+  if (!result.ok) return result;
+  return ok(result.value ? result.value.split('\n').filter(Boolean) : []);
+}
+
+export async function restoreCheckpoint(
+  repoDir: string,
+  ref: string,
+  preserveUntracked: readonly string[] = [],
+): Promise<Result<void>> {
+  const reset = await git(repoDir, `reset --hard "${ref}"`);
+  if (!reset.ok) return reset;
+
+  const untracked = await untrackedFiles(repoDir);
+  if (!untracked.ok) return untracked;
+
+  const preserve = new Set(preserveUntracked);
+  for (const file of untracked.value) {
+    if (preserve.has(file)) continue;
+    const target = Path.resolve(repoDir, file);
+    const relative = Path.relative(repoDir, target);
+    if (relative.startsWith('..') || Path.isAbsolute(relative)) {
+      return err(makeError('GitError', `refusing to remove path outside repo: ${file}`));
+    }
+    await fs.rm(target, { recursive: true, force: true });
+  }
+
+  return ok(undefined);
 }
 
 /** Number of commits in `range` (e.g. "<baseline>..HEAD"). */

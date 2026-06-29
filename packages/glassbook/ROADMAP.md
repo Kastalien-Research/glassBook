@@ -127,8 +127,9 @@ Better inputs to the kernel.
   guessing from conventions (§2.2 — the biggest unpinned-gate reliability risk).
 - Research fans out into multiple independent cells up to budget, replacing the single
   gather-then-synthesize pass (§2.2, §2.7).
-- Resolve loadPackages: either actually load notebook/target dependencies, or formally ratify the
-  "game-board setup" reinterpretation in the design (§2.2).
+- `loadPackages` is formally ratified as **game-board setup**: validate the target repo,
+  establish a clean git baseline, and create the protocol branch. Dependency installation remains
+  an explicit `--allow-install` setup action, not an implicit section side effect (§2.2).
 
 **Exit:** gates are discovered (not guessed) when `--gate` is absent; research scales with budget.
 

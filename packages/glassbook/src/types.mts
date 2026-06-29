@@ -5,6 +5,8 @@ import type {
   ExecutionResult,
   EvaluationVerdict,
 } from './schemas.mjs';
+import type { ForbiddenBehavior, TurnRecord } from './epiops/kernel/index.mjs';
+import type { GlassbookCell } from './cell.mjs';
 
 /**
  * Failure model (Effect-spirit, vanilla TS).
@@ -113,6 +115,8 @@ export interface RunConfig {
   readonly gateCommands?: string[];
   /** Allow the agent to install dependencies in the target repo. */
   readonly allowInstall: boolean;
+  /** Explicit per-session environment exposed to shell tools. */
+  readonly sessionEnv?: Readonly<Record<string, string>>;
   /** Where to also write the exported .src.md, if set. */
   readonly outFile?: string;
 }
@@ -134,6 +138,12 @@ export interface GlassbookState {
   budgets: Budgets;
   /** Commit hashes that mark successful turns (Ulysses checkpoints). */
   checkpoints: string[];
+  /** Kernel turn trace for replay/audit. */
+  kernelTurns?: TurnRecord[];
+  /** Persisted positional forbidden behavior records from CONSIDERATION. */
+  forbiddenBehaviors?: ForbiddenBehavior[];
+  /** Typed input-processing-output cells emitted by sections. */
+  glassbookCells: GlassbookCell[];
   /** The working branch the protocol operates on. */
   workingBranch?: string;
   /** PR url, when opened. */
@@ -150,6 +160,7 @@ export function initialState(config: RunConfig): GlassbookState {
     template: config.template,
     budgets: config.budgets,
     checkpoints: [],
+    glassbookCells: [],
     failures: [],
   };
 }

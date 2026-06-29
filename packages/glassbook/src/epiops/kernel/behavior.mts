@@ -1,6 +1,12 @@
 import type { BehaviorPosition } from './state-machine.mjs';
 import type { EvaluationOutcome } from './evaluation.mjs';
 
+export interface BehaviorGate {
+  readonly id: string;
+  readonly description: string;
+  readonly command: string;
+}
+
 /**
  * An immutable commitment plotted for a turn: an action (described by intent)
  * plus the evaluator that grades it. The `signature` is a stable hash used to
@@ -13,6 +19,8 @@ export interface Behavior {
   readonly intent: string;
   /** What success means for this behavior (the per-behavior gate). */
   readonly evaluatorDescription: string;
+  /** Executable per-behavior gate. */
+  readonly evaluatorGate?: BehaviorGate;
   /** Stable signature for positional forbidding. */
   readonly signature: string;
 }
@@ -41,12 +49,14 @@ export function makeBehavior(args: {
   position: BehaviorPosition;
   intent: string;
   evaluatorDescription: string;
+  evaluatorGate?: BehaviorGate;
 }): Behavior {
   return {
     id: args.id,
     position: args.position,
     intent: args.intent,
     evaluatorDescription: args.evaluatorDescription,
+    evaluatorGate: args.evaluatorGate,
     signature: behaviorSignature(args.intent, args.evaluatorDescription),
   };
 }

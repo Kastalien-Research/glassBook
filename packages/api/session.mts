@@ -31,6 +31,7 @@ import { validFilename } from '@srcbook/shared';
 import { pathToCodeFile } from './srcbook/path.mjs';
 import { exec } from 'node:child_process';
 import { npmInstall } from './exec.mjs';
+import { isQuiet } from './env.mjs';
 
 const sessions: Record<string, SessionType> = {};
 
@@ -404,9 +405,11 @@ async function load() {
         sessions[session.id] = session;
         return session;
       } catch (e) {
-        console.error(
-          `Error loading session from ${entry.name}: ${(e as Error).message}. Skipping...`,
-        );
+        if (!isQuiet()) {
+          console.error(
+            `Error loading session from ${entry.name}: ${(e as Error).message}. Skipping...`,
+          );
+        }
       }
     });
 

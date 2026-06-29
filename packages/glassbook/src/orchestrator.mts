@@ -19,6 +19,7 @@ import { runEvaluation } from './sections/evaluation.mjs';
 import { pushBranch, createPullRequest, revListCount } from './git.mjs';
 import { buildPrBody } from './pr.mjs';
 import { UsageMeter } from './cost.mjs';
+import { runResultSection } from './effect-runtime.mjs';
 
 export interface RunResult {
   readonly ok: boolean;
@@ -48,7 +49,7 @@ export async function runGlassbook(
     config,
     state,
     emitter,
-    tools: makeTools(config.repoDir),
+    tools: makeTools(config.repoDir, config.sessionEnv),
     logger,
     repoDir: config.repoDir,
     meter,
@@ -73,19 +74,20 @@ export async function runGlassbook(
   };
 
   // 1. Load packages / game board setup
-  const lp = await runLoadPackages(ctx);
+  const lp = await runResultSection('loadPackages', () => runLoadPackages(ctx));
   if (!lp.ok) return fail(lp.error);
 
   // 2. Initialize
-  const planR = await runInitialize(ctx);
+  const planR = await runResultSection('initialize', () => runInitialize(ctx));
   if (!planR.ok) return fail(planR.error);
-  state.plan = planR.value;
+  const plan = planR.value;
+  state.plan = plan;
 
   // Pin the gates if the caller specified them explicitly (--gate). This removes
   // the biggest source of v0 unreliability: the planner guessing the gate.
   if (config.gateCommands && config.gateCommands.length > 0) {
     state.plan = {
-      ...state.plan,
+      ...plan,
       finalGates: config.gateCommands.map((command, i) => ({
         id: `gate-${i + 1}`,
         description: 'user-specified gate (--gate)',
@@ -99,24 +101,32 @@ export async function runGlassbook(
         .join('\n')}`,
     );
   }
+  const finalPlan = state.plan;
 
   // 3. Research
-  const researchR = await runResearch(ctx, state.plan);
+  const researchR = await runResultSection('research', () => runResearch(ctx, finalPlan));
   if (!researchR.ok) return fail(researchR.error);
-  state.research = researchR.value;
+  const research = researchR.value;
+  state.research = research;
 
   // 4. Work plan
-  const wpR = await runWorkPlan(ctx, state.plan, state.research);
+  const wpR = await runResultSection('workPlan', () => runWorkPlan(ctx, finalPlan, research));
   if (!wpR.ok) return fail(wpR.error);
-  state.workPlan = wpR.value;
+  const workPlan = wpR.value;
+  state.workPlan = workPlan;
 
   // 5. Work execution
-  const execR = await runWorkExecution(ctx, state.plan, state.workPlan);
+  const execR = await runResultSection('workExecution', () =>
+    runWorkExecution(ctx, finalPlan, workPlan),
+  );
   if (!execR.ok) return fail(execR.error);
-  state.execution = execR.value;
+  const execution = execR.value;
+  state.execution = execution;
 
   // 6. Evaluation
-  const evalR = await runEvaluation(ctx, state.plan, state.execution);
+  const evalR = await runResultSection('evaluation', () =>
+    runEvaluation(ctx, finalPlan, execution),
+  );
   if (!evalR.ok) return fail(evalR.error);
   state.evaluation = evalR.value;
 

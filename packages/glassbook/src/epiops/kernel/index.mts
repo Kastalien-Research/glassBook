@@ -13,7 +13,7 @@ export {
   nextStep,
 } from './state-machine.mjs';
 export { type EvaluationOutcome, type EvaluationResult, isResolving } from './evaluation.mjs';
-export { type Behavior, behaviorSignature, makeBehavior } from './behavior.mjs';
+export { type Behavior, type BehaviorGate, behaviorSignature, makeBehavior } from './behavior.mjs';
 export { type ForbiddenBehavior, ForbiddenStore } from './forbidden.mjs';
 export {
   type Attempt,

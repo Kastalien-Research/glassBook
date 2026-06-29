@@ -61,7 +61,7 @@ export type ResearchFindings = z.infer<typeof ResearchFindingsSchema>;
 // Section 4 - Work Plan
 // ---------------------------------------------------------------------------
 
-export const EpiOpsProcessIdSchema = z.enum(['ulysses']);
+export const EpiOpsProcessIdSchema = z.enum(['ulysses', 'theseus', 'hephaestus', 'ariadne']);
 export type EpiOpsProcessId = z.infer<typeof EpiOpsProcessIdSchema>;
 
 export const WorkPlanSchema = z.object({
@@ -69,8 +69,14 @@ export const WorkPlanSchema = z.object({
   rationale: z.string().describe('Why this process fits the problem.'),
   primaryHypothesis: z
     .string()
-    .describe('Best first action/hypothesis to make progress (Ulysses step 1).'),
-  backupHypothesis: z.string().describe('Fallback action if the primary fails (Ulysses step 2).'),
+    .describe('Best first action/hypothesis to make progress (protocol step 1).'),
+  primaryEvaluator: GateConditionSpecSchema.describe(
+    'Gate command that evaluates whether the primary behavior succeeded.',
+  ),
+  backupHypothesis: z.string().describe('Fallback action if the primary fails (protocol step 2).'),
+  backupEvaluator: GateConditionSpecSchema.describe(
+    'Gate command that evaluates whether the backup behavior succeeded.',
+  ),
 });
 export type WorkPlan = z.infer<typeof WorkPlanSchema>;
 

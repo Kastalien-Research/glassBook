@@ -33,77 +33,109 @@ Snapshot of what is and isn't operational after the v0 build pass.
 
 The conceptual core is implemented; several spec details from `workflows/ulysses.md` are simplified:
 
-- 🟡 **Single working branch, not branch-per-loop.** The spec opens a new branch from the checkpoint each loop and merges into main on each successful turn. We operate on one working branch, accumulate checkpoint commits, and open **one** PR at the end. No per-turn merge-to-main; no "protocol offshoot" branch distinct from the working branch.
+- ✅ Each turn runs on `<working-branch>-turn-N` from the checkpoint and successful turns merge
+  back into the glassBook working PR branch. The implementation intentionally does not merge
+  directly into the user's base branch.
 - 🟡 **`workExecution` budget = max turns**, not max cells. (Documented in `src/templates/codebase-update.mts`.)
-- 🟡 **Behaviors are not pre-plotted immutable `{action, eval-code}` pairs.** Primary/backup hypotheses come from the Work Plan (turn 1) or a hypothesis sub-call (later turns). There is no separate per-behavior evaluation code.
-- 🟡 **Gate is global, not per-behavior.** Every step is checked against the same `plan.finalGates`, rather than behavior-specific success code.
-- 🟡 **Forbidden behaviors** are tracked in-memory as strings passed to the next hypothesis prompt. They are not persisted and not enforced positionally/structurally as the spec describes.
-- 🟡 **CONSIDERATION reset is destructive:** `git reset --hard <checkpoint> && git clean -fd` in the target repo. Safe only because of the clean-tree precondition + repo isolation.
-- 🟥 **No explicit `stateStep` enum counter** `[0,1,2,-1]`; the semantics are expressed via control flow, not a modeled counter.
+- ✅ Behaviors are plotted as primary/backup commitments and carry behavior-specific evaluator
+  gates; the generated evaluator code is emitted as notebook code cells.
+- ✅ The live Ulysses path runs the behavior evaluator for each attempt and the final gate for
+  completion.
+- ✅ Forbidden behaviors are persisted in `glassbook.json` and enforced positionally by the
+  kernel's `ForbiddenStore`.
+- ✅ CONSIDERATION restore uses checkpoint restore instead of `git reset --hard` plus
+  `git clean -fd`.
+- ✅ The kernel models the explicit `stateStep` enum `[0,1,2,-1]`.
 
 ### 2.2 Sections
 
 - 🟡 **loadPackages** (`src/sections/load-packages.mts`): reinterpreted as "game board setup" — validates git repo / GitHub remote / clean tree and cuts the working branch. It does **not** load notebook/target dependencies here (install happens in workExecution under `--allow-install`).
 - 🟡 **initialize** (`src/sections/initialize.mts`): single structured call with **no tools**, so gates are _guessed_ from conventions unless pinned with `--gate`. Unpinned gate quality is the biggest reliability risk.
 - 🟡 **research** (`src/sections/research.mts`): **single pass** (read-only tools), emitting an investigation cell + a findings cell. Does **not** fan out into up-to-X independent research cells; the per-section budget mostly scales `maxSteps` rather than spawning cells.
-- 🟡 **workPlan** (`src/sections/work-plan.mts`): "chooses" a process but the enum has only `ulysses`, so the choice is fixed. No real EpiOps library yet.
+- ✅ **workPlan** (`src/sections/work-plan.mts`): chooses among the codebase protocol family
+  (`ulysses`, `theseus`, `hephaestus`, `ariadne`) and includes markdown-derived entities,
+  behavior/evaluator schema, transitions, and packet schema in the planner prompt.
 - 🟡 **evaluation** (`src/sections/evaluation.mts`): real adversarial review, but uses the **same model** as the worker (no stronger reviewer model) and is not sandboxed.
 
 ### 2.3 Gate conditions (design component #1)
 
-- 🟡 Gates exist as executable shell commands validating the **final** output.
-- 🟥 **No per-cell gate conditions.** The design's "executable code validating each cell + the template represented as a type with gates" is not implemented.
-- 🟥 **Gates are not re-runnable notebook cells.** They run against the target repo via `sh` and are emitted as **evidence text**, not as Srcbook code cells executed by the notebook engine.
+- ✅ Gates exist as executable shell commands validating the **final** output.
+- ✅ Work-execution behaviors carry their own evaluator gate; the live Ulysses path runs the
+  behavior gate for the attempt and the final gate for completion.
+- ✅ Gates are emitted as Srcbook code cells and executed through the notebook-local TypeScript
+  runner during the run; cell output is recorded as evidence alongside the direct shell gate.
 
 ### 2.4 Cell budgets (design component #2)
 
 - 🟡 Per-section budgets exist (`RunConfig.budgets`, `--budget-research`, `--budget-exec`) and are enforced via `consumeBudget`.
-- 🟡 Only **workExecution** (Ulysses turns) and **research** (1) actually consume/loop. `loadPackages`, `initialize`, `workPlan` are single-shot regardless of budget — they don't "create additional cells up to a limit."
+- ✅ `loadPackages`, `initialize`, `research`, `workPlan`, `workExecution`, and `evaluation`
+  all consume section budgets. Single-shot sections still consume one cell.
 
 ### 2.5 Failure types (design component #3)
 
-- ✅ Implemented as a vanilla-TS tagged union + `Result<A>`.
-- 🟡 Tags are coarse; no retry/backoff/recovery strategies. Not yet Effect-TS (planned refactor).
+- ✅ `GlassbookError` is the typed Effect error channel via `effect-runtime.mts`; existing
+  `Result<A>` section returns are converted through the Effect boundary.
+- ✅ Section recovery policies are explicit (`retryable`, `maxRetries`) and live next to the
+  Effect bridge.
 
 ### 2.6 Notebook / cell model & audit
 
-- 🟡 **glassBook "cells" are not a new srcmd cell type.** We reuse existing `markdown`/`code` cells; structured input/processing/output + gate results are rendered as **markdown narration + evidence**, not as the typed `[input → processing → output]` units from the design.
-- 🟥 **Notebook cells are not executable/re-runnable** in Srcbook (evidence only). "Click back through the notebook" works; "re-run cell N live" does not.
-- 🟥 **No replay/retroactive-run tooling.** `glassbook.json` is written for replay, but nothing consumes it yet (no "re-run the notebook" / "re-run evaluation" commands).
+- ✅ glassBook now persists typed `[input → processing → output]` cell records with gates in
+  `glassbook.json` while still rendering the notebook through existing Srcbook `markdown`/`code`
+  cells.
+- ✅ Gate notebook cells are executable/re-runnable through the notebook runtime, and their
+  output is captured during Ulysses execution.
+- ✅ Replay tooling consumes `glassbook.json` for saved final-gate replay via `glassbook replay`
+  and `glassbook replay-evaluation`.
 - 🟥 **No live UI streaming.** Headless only; the notebook is written to `~/.srcbook/srcbooks/<id>/` and optionally exported via `--out`.
-- 🟡 The notebook is a **separate** srcbook from the target repo; the notebook's own package.json/tsconfig (tsx/typescript/prettier) are created but never installed/used.
+- ✅ The notebook is a **separate** srcbook from the target repo; its own package.json/tsconfig
+  are checked before execution, dependencies install when `tsx` is missing, and code cells run
+  with the notebook as cwd.
 
 ### 2.7 Subagent / AI layer (`src/subagent.mts`)
 
-- 🟡 Uses `generateObject`, which is **deprecated in AI SDK v6** (still functional). Did not migrate to `generateText` + `Output.object`.
-- 🟡 **One model for every role** (planner, worker, reviewer, hypothesis) — whatever provider/model is configured.
-- 🟡 `maxSteps` heuristics are ad hoc.
-- 🟥 No retry/backoff on transient LLM errors (a `SubagentError` fails the section).
-- 🟥 No token/cost accounting or budget (only step-count limits).
+- ✅ Planning subagents use AI SDK v6 `generateText` + `Output.object` for structured output.
+- ✅ Per-role model overrides are supported via `SRCBOOK_AI_MODEL_<ROLE>` for planner, worker,
+  reviewer, and hypothesis roles.
+- 🟡 `maxSteps` heuristics are centralized but still heuristic.
+- ✅ Transient LLM failures use retry/backoff before surfacing `SubagentError`.
+- ✅ Token usage is recorded per role and persisted in the notebook sidecar.
 - 🟥 No streaming; research uses a two-step gather-then-synthesize rather than structured-output-with-tools.
 
 ### 2.8 Git / GitHub (`src/git.mts`)
 
 - 🟡 Requires `origin` to be a `github.com` remote (for the PR). No support for other forges.
-- 🟥 No handling of push conflicts, pre-existing branches, rebases, or merge-to-main per turn.
-- 🟡 Commit messages via temp file; PR body is a fixed template.
+- ✅ Pre-existing branch names are handled by suffixing. Stale remote pushes fetch/rebase/retry,
+  and rebase conflicts return a clear GitError.
+- ✅ PR body is generated from run state: gates, research, execution, evaluation, checkpoints,
+  kernel turns, typed cells, and usage.
 
 ### 2.9 Config / env / models
 
-- 🟡 `.env` is auto-loaded only by the **glassbook CLI** (and `getModel` reads `process.env` generally). The **web/dev server does not auto-load `.env`.**
-- 🟡 Default model bumped to `claude-haiku-4-5` for Anthropic (and OpenRouter route); **OpenAI and other defaults remain stale** (intentional — OpenAI is a later step).
-- 🟡 SQLite config (`~/.srcbook/srcbook.db`) still exists and is the fallback; env overrides it.
+- ✅ `.env` is auto-loaded by the **glassbook CLI** and the **web/dev server**. Both load
+  an explicit path when provided, then `./.env`, then `~/.srcbook/.env`.
+- ✅ Hosted-provider defaults are refreshed for OpenAI (`gpt-5.5`), xAI (`grok-4.3`),
+  Gemini (`gemini-3.5-flash`), Anthropic (`claude-haiku-4-5`), and OpenRouter
+  (`anthropic/claude-haiku-4-5`).
+- ✅ Config precedence is explicit: direct call options such as `getModel({ model })`
+  win first, then environment variables, then SQLite config (`~/.srcbook/srcbook.db`),
+  then provider defaults.
 
 ### 2.10 Tooling / security
 
-- 🟥 **No sandbox.** `runShell` executes arbitrary bash in the target repo with full user permissions; `webFetch` can hit any URL. Safe only for **trusted** prompts/repos.
-- 🟡 Output truncated at ~20k chars; shell commands time out at 300s; gate commands inherit the CLI's `process.env` (no per-session secret management like Srcbook's).
+- ✅ Tool-exposed `runShell` uses the macOS `sandbox-exec` repo filesystem sandbox when
+  available and fails closed when the OS sandbox cannot be applied. Shell tools receive only the
+  minimal shell environment plus explicit `RunConfig.sessionEnv`.
+- ✅ `webFetch` blocks localhost and private-network URLs before making a request.
+- 🟡 Output truncated at ~20k chars; shell commands time out at 300s.
 
 ### 2.11 Build / dev environment
 
-- 🟡 `.nvmrc` pins Node `22.7.0` (not installed locally); built/ran on `22.22.3`.
-- 🟡 `@srcbook/api` must be **built** (`dist/`) before glassBook typechecks/runs — the `@srcbook/api/headless` subpath resolves to `dist`.
-- 🟡 Importing `@srcbook/api` scans `~/.srcbook/srcbooks` and prints noisy `Skipping...` errors for unrelated invalid notebooks (cosmetic; not yet silenced — no headless/quiet flag on the API).
+- ✅ `.nvmrc` tracks the Node 22 line instead of pinning an unavailable patch release.
+- ✅ glassBook package typecheck builds `@srcbook/api` first because the
+  `@srcbook/api/headless` subpath resolves to `dist`.
+- ✅ `SRCBOOK_QUIET=1` (or `true`) suppresses boot-time skipped-session scan noise for
+  unrelated invalid notebooks.
 
 ### 2.12 Tests / CI
 

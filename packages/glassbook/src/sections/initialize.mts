@@ -1,7 +1,7 @@
 import { runPlanSubagent, runToolSubagent, MAX_STEPS } from '../subagent.mjs';
 import { makeReadOnlyTools } from '../tools.mjs';
 import { PlanSchema, type Plan } from '../schemas.mjs';
-import type { SectionContext } from '../context.mjs';
+import { consumeBudget, type SectionContext } from '../context.mjs';
 import { ok, type Result } from '../types.mjs';
 
 /**
@@ -20,6 +20,9 @@ import { ok, type Result } from '../types.mjs';
 export async function runInitialize(ctx: SectionContext): Promise<Result<Plan>> {
   const { state, emitter, logger, repoDir } = ctx;
   logger.section('2 · Initialize');
+
+  const budget = consumeBudget(state, 'initialize', 1);
+  if (!budget.ok) return budget;
 
   // Step A: discover the real verification commands (read-only).
   const discoverSystem = [

@@ -2,6 +2,7 @@ import type { NotebookEmitter } from './emitter.mjs';
 import type { GlassbookToolSet } from './tools.mjs';
 import type { Logger } from './logger.mjs';
 import type { UsageMeter } from './cost.mjs';
+import type { NotebookCellResult } from './notebook-runtime.mjs';
 import {
   makeError,
   ok,
@@ -25,6 +26,13 @@ export interface SectionContext {
   readonly repoDir: string;
   /** Accumulates token usage across every subagent call in the run. */
   readonly meter: UsageMeter;
+  /** Executes emitted code cells using the notebook-local runtime. */
+  readonly notebookRuntime?: {
+    readonly executeCodeCell: (args: {
+      readonly notebookDir: string;
+      readonly filename: string;
+    }) => Promise<NotebookCellResult>;
+  };
 }
 
 /** Remaining cell budget for a section. */
