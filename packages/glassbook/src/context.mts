@@ -1,6 +1,7 @@
 import type { NotebookEmitter } from './emitter.mjs';
 import type { GlassbookToolSet } from './tools.mjs';
 import type { Logger } from './logger.mjs';
+import type { UsageMeter } from './cost.mjs';
 import {
   makeError,
   ok,
@@ -22,6 +23,8 @@ export interface SectionContext {
   readonly tools: GlassbookToolSet;
   readonly logger: Logger;
   readonly repoDir: string;
+  /** Accumulates token usage across every subagent call in the run. */
+  readonly meter: UsageMeter;
 }
 
 /** Remaining cell budget for a section. */

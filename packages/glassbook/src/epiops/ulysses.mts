@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { sh } from '../tools.mjs';
 import { runGates as runGatesPure, type ShRunner } from '../gates.mjs';
-import { runToolSubagent, runPlanSubagent } from '../subagent.mjs';
+import { runToolSubagent, runPlanSubagent, MAX_STEPS } from '../subagent.mjs';
 import { commitAll, headHash, isClean } from '../git.mjs';
 import { budgetRemaining, consumeBudget, type SectionContext } from '../context.mjs';
 import type { Plan, WorkPlan, ExecutionResult, GateConditionSpec } from '../schemas.mjs';
@@ -82,7 +82,14 @@ async function attempt(
     .filter(Boolean)
     .join('\n');
 
-  const res = await runToolSubagent({ system, prompt, tools: ctx.tools, maxSteps: 30 });
+  const res = await runToolSubagent({
+    system,
+    prompt,
+    tools: ctx.tools,
+    maxSteps: MAX_STEPS.worker,
+    role: 'worker',
+    meter: ctx.meter,
+  });
   if (!res.ok) return res;
   return ok(res.value.text);
 }
@@ -183,6 +190,8 @@ export async function runUlysses(
         ]
           .filter(Boolean)
           .join('\n\n'),
+        role: 'hypothesis',
+        meter: ctx.meter,
       });
       if (!plotted.ok) return plotted;
       primary = plotted.value.primary;
@@ -233,7 +242,9 @@ export async function runUlysses(
         'You are in Ulysses CONSIDERATION mode. The last two behaviors failed. Hypothesize WHY they failed and what category of approach should be tried next. Do not modify files; you may inspect them.',
       prompt: `Objective: ${state.prompt}\n\nFailed step 1: ${primary}\nFailed step 2: ${backup}\n\nLatest gate output:\n${gate2.output}`,
       tools: ctx.tools,
-      maxSteps: 12,
+      maxSteps: MAX_STEPS.hypothesis,
+      role: 'hypothesis',
+      meter: ctx.meter,
     });
     const considerationText = consideration.ok
       ? consideration.value.text

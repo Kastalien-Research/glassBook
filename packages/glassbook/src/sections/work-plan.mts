@@ -36,6 +36,8 @@ export async function runWorkPlan(
     schemaName: 'WorkPlan',
     system,
     prompt,
+    role: 'planner',
+    meter: ctx.meter,
   });
   if (!res.ok) return res;
 

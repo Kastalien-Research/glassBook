@@ -8,8 +8,12 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 /**
  * Get the correct client and model configuration.
  * Throws an error if the given API key is not set in the settings.
+ *
+ * `opts.model` lets a caller pin a specific model (e.g. glassBook's per-role
+ * model selection) while still reusing the configured provider + key. It takes
+ * precedence over the env var and the SQLite config.
  */
-export async function getModel(): Promise<LanguageModel> {
+export async function getModel(opts?: { model?: string }): Promise<LanguageModel> {
   const config = await getConfig();
 
   // Environment variables take precedence over the SQLite config. This is what
@@ -19,7 +23,8 @@ export async function getModel(): Promise<LanguageModel> {
   const provider =
     (process.env.SRCBOOK_AI_PROVIDER as AiProviderType | undefined) ||
     (config.aiProvider as AiProviderType);
-  const model = process.env.SRCBOOK_AI_MODEL || config.aiModel || getDefaultModel(provider);
+  const model =
+    opts?.model || process.env.SRCBOOK_AI_MODEL || config.aiModel || getDefaultModel(provider);
   const aiBaseUrl = process.env.SRCBOOK_AI_BASE_URL || config.aiBaseUrl;
 
   const openaiKey = process.env.OPENAI_API_KEY || config.openaiKey;

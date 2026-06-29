@@ -45,6 +45,8 @@ export async function runResearch(
     prompt: gatherPrompt,
     tools,
     maxSteps,
+    role: 'worker',
+    meter: ctx.meter,
   });
   if (!gather.ok) return gather;
 
@@ -56,6 +58,8 @@ export async function runResearch(
     system:
       'Convert the research report into structured findings. knownBeforeWork = necessary AND accessible now; unknowableBeforeWork = necessary but only discoverable during work.',
     prompt: gather.value.text,
+    role: 'planner',
+    meter: ctx.meter,
   });
   if (!synth.ok) return synth;
 

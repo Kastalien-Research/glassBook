@@ -18,6 +18,7 @@ import { runWorkExecution } from './sections/work-execution.mjs';
 import { runEvaluation } from './sections/evaluation.mjs';
 import { pushBranch, createPullRequest, revListCount } from './git.mjs';
 import { buildPrBody } from './pr.mjs';
+import { UsageMeter } from './cost.mjs';
 
 export interface RunResult {
   readonly ok: boolean;
@@ -42,6 +43,7 @@ export async function runGlassbook(
   state.notebookDir = emitter.dir;
   logger.info(`notebook: ${emitter.dir}`);
 
+  const meter = new UsageMeter();
   const ctx: SectionContext = {
     config,
     state,
@@ -49,9 +51,12 @@ export async function runGlassbook(
     tools: makeTools(config.repoDir),
     logger,
     repoDir: config.repoDir,
+    meter,
   };
 
   const finalize = async (): Promise<void> => {
+    state.usage = meter.toJSON();
+    await emitter.section('Usage', meter.format());
     await emitter.persistState(state);
     if (config.outFile) {
       await emitter.writeSrcMd(config.outFile);

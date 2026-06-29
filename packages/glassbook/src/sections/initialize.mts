@@ -31,6 +31,8 @@ export async function runInitialize(ctx: SectionContext): Promise<Result<Plan>> 
     schemaName: 'Plan',
     system,
     prompt,
+    role: 'planner',
+    meter: ctx.meter,
   });
   if (!res.ok) return res;
   const plan = res.value;

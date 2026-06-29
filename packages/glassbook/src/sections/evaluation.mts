@@ -1,4 +1,4 @@
-import { runToolSubagent, runPlanSubagent } from '../subagent.mjs';
+import { runToolSubagent, runPlanSubagent, MAX_STEPS } from '../subagent.mjs';
 import {
   EvaluationVerdictSchema,
   type EvaluationVerdict,
@@ -47,7 +47,9 @@ export async function runEvaluation(
     system: reviewSystem,
     prompt: reviewPrompt,
     tools,
-    maxSteps: 18,
+    maxSteps: MAX_STEPS.reviewer,
+    role: 'reviewer',
+    meter: ctx.meter,
   });
   const reviewText = review.ok
     ? review.value.text
@@ -61,6 +63,8 @@ export async function runEvaluation(
     system:
       'Based on the adversarial review, produce the final verdict. Approve ONLY if the objective is genuinely satisfied and the gates truly pass without gaming. If anything looks gamed, set rewardHackingDetected=true and verdict="reject".',
     prompt: `Objective: ${state.prompt}\n\nAdversarial review:\n${reviewText}\n\nClaimed test output:\n${execution.testOutput}`,
+    role: 'reviewer',
+    meter: ctx.meter,
   });
   if (!verdictRes.ok) return verdictRes;
 

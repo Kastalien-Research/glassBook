@@ -138,6 +138,8 @@ export interface GlassbookState {
   workingBranch?: string;
   /** PR url, when opened. */
   pullRequestUrl?: string;
+  /** Token usage summary for the run (set at finalize). */
+  usage?: { totals: unknown; byRole: unknown };
   failures: GlassbookError[];
 }
 

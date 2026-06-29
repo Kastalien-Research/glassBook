@@ -91,6 +91,7 @@ function serializeState(state: GlassbookState) {
     checkpoints: state.checkpoints,
     workingBranch: state.workingBranch,
     pullRequestUrl: state.pullRequestUrl,
+    usage: state.usage,
     failures: state.failures.map(serializeError),
   };
 }
