@@ -19,9 +19,7 @@ export const GateConditionSpecSchema = z.object({
    * A shell command, run in the target repo, whose exit code 0 means the gate
    * passes. This is the executable validation for the cell/section.
    */
-  command: z
-    .string()
-    .describe('Shell command run in the repo; exit code 0 == gate passes.'),
+  command: z.string().describe('Shell command run in the repo; exit code 0 == gate passes.'),
 });
 export type GateConditionSpec = z.infer<typeof GateConditionSpecSchema>;
 
@@ -72,9 +70,7 @@ export const WorkPlanSchema = z.object({
   primaryHypothesis: z
     .string()
     .describe('Best first action/hypothesis to make progress (Ulysses step 1).'),
-  backupHypothesis: z
-    .string()
-    .describe('Fallback action if the primary fails (Ulysses step 2).'),
+  backupHypothesis: z.string().describe('Fallback action if the primary fails (Ulysses step 2).'),
 });
 export type WorkPlan = z.infer<typeof WorkPlanSchema>;
 

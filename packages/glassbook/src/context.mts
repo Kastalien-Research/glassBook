@@ -35,11 +35,7 @@ export function budgetRemaining(state: GlassbookState, id: SectionId): number {
  * section has no room left. This is what makes "create more cells until the
  * limit" a typed, enforceable contract.
  */
-export function consumeBudget(
-  state: GlassbookState,
-  id: SectionId,
-  n: number = 1,
-): Result<void> {
+export function consumeBudget(state: GlassbookState, id: SectionId, n: number = 1): Result<void> {
   const b = state.budgets[id];
   if (b.used + n > b.limit) {
     return err(

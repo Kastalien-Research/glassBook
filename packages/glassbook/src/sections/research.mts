@@ -11,7 +11,10 @@ import { ok, type Result } from '../types.mjs';
  * subagent investigates the codebase/web, then a planning subagent synthesizes
  * structured findings. Bounded by the research cell budget.
  */
-export async function runResearch(ctx: SectionContext, plan: Plan): Promise<Result<ResearchFindings>> {
+export async function runResearch(
+  ctx: SectionContext,
+  plan: Plan,
+): Promise<Result<ResearchFindings>> {
   const { state, emitter, logger } = ctx;
   logger.section('3 · Research');
 

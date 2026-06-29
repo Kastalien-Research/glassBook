@@ -103,6 +103,10 @@ export async function createPullRequest(
   if (res.code !== 0) {
     return err(makeError('GitError', `gh pr create failed: ${res.combined.trim()}`));
   }
-  const url = res.stdout.trim().split('\n').find((l) => l.startsWith('http')) ?? res.stdout.trim();
+  const url =
+    res.stdout
+      .trim()
+      .split('\n')
+      .find((l) => l.startsWith('http')) ?? res.stdout.trim();
   return ok(url);
 }

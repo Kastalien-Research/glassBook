@@ -45,9 +45,7 @@ export async function runWorkExecution(
     }
     default: {
       const _exhaustive: never = workPlan.process;
-      return err(
-        makeError('WorkPlanError', `unknown EpiOps process: ${String(_exhaustive)}`),
-      );
+      return err(makeError('WorkPlanError', `unknown EpiOps process: ${String(_exhaustive)}`));
     }
   }
 }

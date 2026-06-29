@@ -49,7 +49,9 @@ export async function runEvaluation(
     tools,
     maxSteps: 18,
   });
-  const reviewText = review.ok ? review.value.text : `(review tool run failed: ${review.error.message})`;
+  const reviewText = review.ok
+    ? review.value.text
+    : `(review tool run failed: ${review.error.message})`;
 
   await emitter.section('Evaluation — Adversarial review', reviewText);
 
@@ -68,7 +70,9 @@ export async function runEvaluation(
       `**Verdict:** ${verdictRes.value.verdict.toUpperCase()}`,
       `**Reward hacking detected:** ${verdictRes.value.rewardHackingDetected ? 'yes' : 'no'}`,
       `\n${verdictRes.value.reasoning}`,
-      verdictRes.value.issues.length ? `\n**Issues:**\n- ${verdictRes.value.issues.join('\n- ')}` : '',
+      verdictRes.value.issues.length
+        ? `\n**Issues:**\n- ${verdictRes.value.issues.join('\n- ')}`
+        : '',
     ]
       .filter(Boolean)
       .join('\n'),

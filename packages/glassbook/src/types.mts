@@ -43,7 +43,9 @@ export function makeError(
 /**
  * Result<A>: success or a typed failure. No exceptions cross section boundaries.
  */
-export type Result<A> = { readonly ok: true; readonly value: A } | { readonly ok: false; readonly error: GlassbookError };
+export type Result<A> =
+  | { readonly ok: true; readonly value: A }
+  | { readonly ok: false; readonly error: GlassbookError };
 
 export function ok<A>(value: A): Result<A> {
   return { ok: true, value };
