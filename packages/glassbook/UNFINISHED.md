@@ -12,18 +12,18 @@ Consolidated list of everything **not finished**, including items explicitly **d
 
 ## Status at a glance
 
-| Phase                     | Roadmap claim | Verified status               |
-| ------------------------- | ------------- | ----------------------------- |
-| 0 — Papercuts             | ⏳ deferred   | ✅ done                       |
-| 1 — Test & CI net         | ✅            | ✅ done (CI scope unverified) |
-| 2 — AI layer hardening    | ✅            | ✅ done                       |
-| 3 — Smarter sections      | ✅            | ✅ done                       |
-| 4 — EpiOps kernel         | 🟡            | ✅ done                       |
-| 5 — Executable + replay   | ⏳            | ✅ done                       |
-| 6 — Protocol library      | ⏳            | ✅ done                       |
-| 7 — Git/GitHub robustness | ⏳            | ✅ done                       |
-| 8 — Sandbox / security    | ⏳            | ✅ done                       |
-| 9 — Effect-TS refactor    | ⏳ deferred   | ✅ done                       |
+| Phase                     | Roadmap claim | Verified status |
+| ------------------------- | ------------- | --------------- |
+| 0 — Papercuts             | ⏳ deferred   | ✅ done         |
+| 1 — Test & CI net         | ✅            | ✅ done         |
+| 2 — AI layer hardening    | ✅            | ✅ done         |
+| 3 — Smarter sections      | ✅            | ✅ done         |
+| 4 — EpiOps kernel         | 🟡            | ✅ done         |
+| 5 — Executable + replay   | ⏳            | ✅ done         |
+| 6 — Protocol library      | ⏳            | ✅ done         |
+| 7 — Git/GitHub robustness | ⏳            | ✅ done         |
+| 8 — Sandbox / security    | ⏳            | ✅ done         |
+| 9 — Effect-TS refactor    | ⏳ deferred   | ✅ done         |
 
 ---
 
@@ -46,9 +46,9 @@ Consolidated list of everything **not finished**, including items explicitly **d
 - [x] Document SQLite-fallback / env-override precedence (doc only).
 - _Reason deferred (per ROADMAP): touches the web/api server and needs manual validation._
 
-### Phase 1 — Test & CI net ✅ (one verification gap)
+### Phase 1 — Test & CI net ✅
 
-- [ ] **CI not verified by an actual GitHub Actions run.** `.github/workflows/run-tests.yml` was edited and the glassBook suite passes locally (85 tests), but no push-triggered run has confirmed CI green or its exact scope (progress log says CI runs `check-types`; full `build`/`lint`/`test` fan-out unconfirmed).
+- [x] **CI verified by an actual GitHub Actions run.** PR #1 (`feat/glassbook-green` → `main`) merged after the `CI` workflow completed successfully on head SHA `f07a727790470960897ef9749255f95c27c84ece`: `Build and Test (18.x)` and `Build and Test (22.x)` both passed in run `28406443165` on 2026-06-29.
 
 ### Phase 2 — AI layer hardening 🟡
 
@@ -113,5 +113,5 @@ Consolidated list of everything **not finished**, including items explicitly **d
 ## D. Outstanding verification gaps (independent of phases)
 
 - [x] The refactored engine on `feat/glassbook-green` has been exercised end-to-end against real throwaway repos. _Done: two Node 22 live runs against throwaway git repos passed with `--skip-pr`; both resolved in one Ulysses turn, merged a per-turn branch back into the working branch, passed executable gate cells, passed final gates, and received evaluator approval._
-- [ ] CI has not been confirmed green on a push (see Phase 1).
+- [x] CI has been confirmed green on PR #1 (see Phase 1).
 - [x] Per-role model env wiring (`SRCBOOK_AI_MODEL_<ROLE>`) is live-validated. _Done: a live run with `SRCBOOK_AI_MODEL_PLANNER`, `SRCBOOK_AI_MODEL_WORKER`, `SRCBOOK_AI_MODEL_REVIEWER`, and `SRCBOOK_AI_MODEL_HYPOTHESIS` explicitly set completed successfully and recorded planner/worker/reviewer usage. This validated per-role wiring with the configured model; it was intentionally not a mixed-provider cost test._
