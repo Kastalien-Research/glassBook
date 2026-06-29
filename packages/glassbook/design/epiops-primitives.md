@@ -25,68 +25,70 @@ export const CONSIDERATION: StateStep = -1;
 //   Minos   admissible & verdict-changing → success ; else inconclusive
 //   Janus   continue → success ; rollback/contain/pause → failure (triggers backup)
 export type EvaluationOutcome =
-  | 'success'       // desired outcome achieved      → checkpoint + reset to 0
-  | 'partial'       // good-enough to bank a turn     → checkpoint + reset to 0
-  | 'inconclusive'  // no decisive movement           → escalate / consider
-  | 'failure'       // explicit negative outcome
-  | 'invalid';      // the evaluator itself broke (oracle invalidated, failure vanished)
+  | 'success' // desired outcome achieved      → checkpoint + reset to 0
+  | 'partial' // good-enough to bank a turn     → checkpoint + reset to 0
+  | 'inconclusive' // no decisive movement           → escalate / consider
+  | 'failure' // explicit negative outcome
+  | 'invalid'; // the evaluator itself broke (oracle invalidated, failure vanished)
 
 export interface EvaluationResult {
   readonly outcome: EvaluationOutcome;
-  readonly evidence: string;   // audit-readable justification (rendered into the notebook)
-  readonly data?: unknown;     // protocol-specific structured payload
+  readonly evidence: string; // audit-readable justification (rendered into the notebook)
+  readonly data?: unknown; // protocol-specific structured payload
 }
 
 // ── Behavior = (action, evaluator), immutable once plotted ────────────────────
 export interface WorldObservation {
   readonly summary: string;
-  readonly exitCode?: number;            // codebase world
+  readonly exitCode?: number; // codebase world
   readonly payload?: Record<string, unknown>;
 }
 
 export interface Action {
-  readonly intent: string;               // NL description of the move (the "what")
+  readonly intent: string; // NL description of the move (the "what")
   run(world: World): Promise<WorldObservation>;
 }
 
 export interface Evaluator {
-  readonly description: string;          // what success means for THIS behavior (per-cell gate)
+  readonly description: string; // what success means for THIS behavior (per-cell gate)
   evaluate(obs: WorldObservation, world: World): Promise<EvaluationResult>;
 }
 
 export interface Behavior {
   readonly id: string;
-  readonly position: 1 | 2;              // primary (hypothesis) | backup (fallback)
+  readonly position: 1 | 2; // primary (hypothesis) | backup (fallback)
   readonly action: Action;
   readonly evaluator: Evaluator;
-  readonly signature: string;            // stable hash → positional forbidding
+  readonly signature: string; // stable hash → positional forbidding
 }
 
 // ── Checkpoints & the world the actions act on ────────────────────────────────
-export type WorldKind =
-  | 'codebase-git' | 'conversation' | 'decision' | 'dispute' | 'action-plan';
+export type WorldKind = 'codebase-git' | 'conversation' | 'decision' | 'dispute' | 'action-plan';
 
 export interface Checkpoint {
-  readonly ref: string;        // commit hash (codebase) | snapshot token (otherwise)
-  readonly at: string;         // ISO timestamp
-  readonly entities: unknown;  // frozen domain-entity snapshot
+  readonly ref: string; // commit hash (codebase) | snapshot token (otherwise)
+  readonly at: string; // ISO timestamp
+  readonly entities: unknown; // frozen domain-entity snapshot
 }
 
 export interface World {
   readonly kind: WorldKind;
-  checkpoint(): Promise<Checkpoint>;       // git commit | snapshot
-  restore(c: Checkpoint): Promise<void>;   // git reset --hard + clean | snapshot restore
+  checkpoint(): Promise<Checkpoint>; // git commit | snapshot
+  restore(c: Checkpoint): Promise<void>; // git reset --hard + clean | snapshot restore
 }
 
 // ── CONSIDERATION: what makes a behavior pair forbidden, positionally ─────────
 export interface ForbiddenBehavior {
-  readonly fromCheckpoint: string;  // Checkpoint.ref this applies from
+  readonly fromCheckpoint: string; // Checkpoint.ref this applies from
   readonly position: 1 | 2;
-  readonly signature: string;       // Behavior.signature
-  readonly reason: string;          // the CONSIDERATION hypothesis
+  readonly signature: string; // Behavior.signature
+  readonly reason: string; // the CONSIDERATION hypothesis
 }
 
-export interface ConsiderationMove { readonly id: string; readonly description: string; }
+export interface ConsiderationMove {
+  readonly id: string;
+  readonly description: string;
+}
 export interface ConsiderationChoice {
   readonly move: ConsiderationMove;
   readonly hypothesis: string;
@@ -95,13 +97,13 @@ export interface ConsiderationChoice {
 // ── The gamespace: the full mutable state of a run ────────────────────────────
 export interface Objective {
   readonly statement: string;
-  readonly successCondition: string;  // what banks a turn
-  readonly stopCondition: string;     // what ends the whole protocol
+  readonly successCondition: string; // what banks a turn
+  readonly stopCondition: string; // what ends the whole protocol
 }
 
 export interface TurnRecord {
   readonly fromCheckpoint: string;
-  readonly tried: Behavior[];                 // the pair attempted this turn
+  readonly tried: Behavior[]; // the pair attempted this turn
   readonly results: EvaluationResult[];
   readonly transition: TurnTransition;
 }
@@ -115,8 +117,8 @@ export interface Gamespace<Entities, Pkt> {
   plotted: { primary: Behavior; backup: Behavior } | null;
   history: TurnRecord[];
   forbidden: ForbiddenBehavior[];
-  entities: Entities;          // protocol-specific domain model
-  packet?: Pkt;                // set on emit
+  entities: Entities; // protocol-specific domain model
+  packet?: Pkt; // set on emit
 }
 ```
 
@@ -125,14 +127,20 @@ export interface Gamespace<Entities, Pkt> {
 Everything that varies between protocols lives here. The kernel never branches on protocol id.
 
 ```ts
-export interface FramingContext { /* prompt, tools, prior research, world */ }
-export interface PlotContext     { /* tools, forbidden set, prior turn results */ }
-export interface RunContext      { /* budgets, model handles, emitter */ }
+export interface FramingContext {
+  /* prompt, tools, prior research, world */
+}
+export interface PlotContext {
+  /* tools, forbidden set, prior turn results */
+}
+export interface RunContext {
+  /* budgets, model handles, emitter */
+}
 
 export interface ProtocolDefinition<Entities, Pkt> {
-  readonly id: string;                 // 'ulysses' | 'theseus' | 'hephaestus' | 'ariadne' | …
+  readonly id: string; // 'ulysses' | 'theseus' | 'hephaestus' | 'ariadne' | …
   readonly worldKind: WorldKind;
-  readonly usesBranch: boolean;        // Ulysses/Theseus true; Ariadne optional; others false
+  readonly usesBranch: boolean; // Ulysses/Theseus true; Ariadne optional; others false
 
   /** Steps 1–2: declare objective + seed domain entities. (Janus/Minos have two framing steps.) */
   frame(ctx: FramingContext): Promise<{ objective: Objective; entities: Entities }>;
@@ -257,7 +265,7 @@ forbidding are unchanged kernel code.
 3. **Signature stability.** `Behavior.signature` must be stable enough that "the same behavior in
    the same position" is reliably detected for positional forbidding, but not so brittle that
    trivial rewording defeats it. Candidate: normalized intent + evaluator description hash.
-4. **Backup-role constraint.** Janus needs `plot` to *guarantee* the backup is rollback-biased.
+4. **Backup-role constraint.** Janus needs `plot` to _guarantee_ the backup is rollback-biased.
    Express as a per-protocol invariant the kernel can assert, or trust the protocol's `plot`.
 5. **Two-step framing.** Janus/Minos have two framing steps; model `frame` as an ordered list of
    framing sub-steps rather than a single call.
@@ -266,6 +274,7 @@ forbidding are unchanged kernel code.
    becomes `Gamespace.forbidden`.
 
 ## How this lands in the roadmap
+
 This sketch is the conceptual input to **Phase 4 (EpiOps kernel)**. When we brainstorm Phase 4 into
 a plan, these primitives + the open questions above are the starting point; the codebase-family
 protocols (Theseus/Hephaestus/Ariadne) get wired in **Phase 6** as additional `ProtocolDefinition`s.

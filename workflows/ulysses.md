@@ -1,4 +1,4 @@
-# Ulysses Protocol 
+# Ulysses Protocol
 
 ## Overview
 
@@ -9,9 +9,9 @@ The Ulysses Protocol is an operational epistemic workflow (aka an "EpiOps" workf
 - The codebase must be a Git repository and have a linked remote repository on GitHub. This can be a private repository or a public repository.
 - The codebase must be a static codebase, that is, a codebase that is not subject to changes during the process from any agents other than the one executing the Ulysses Protocol.
 
-## Protocol 
+## Protocol
 
-### Step 0: Game Board Setup 
+### Step 0: Game Board Setup
 
 We start off by modeling the codebase as a gamespace. This gamespace has:
 
@@ -19,7 +19,7 @@ We start off by modeling the codebase as a gamespace. This gamespace has:
 - counter that tracks the "state step" of the gamespace, which tracks the number of changes that have been made to the codebase since the most recent checkpoint. The enum of possible steps is [0, 1, 2, -1]. -1 is reserved for CONSIDERATION if the execution of state steps 1 and 2 both result in unexpected outcomes.
 - "behaviors," or commitments to actions (that is, changes to the game state) that the agent will execute at state steps 1 and 2.
 
-Defaults at the beginning: 
+Defaults at the beginning:
 
 stateStep: [0, 1, 2, -1] = 0
 behaviors: Behavior[] = []
@@ -32,7 +32,7 @@ Each behavior is defined in two parts:
 
 ### Step 1: Plot Behaviors
 
-The gamespace starts at state step 0. The agent will plot the behaviors that will be executed at state steps 1 and 2. 
+The gamespace starts at state step 0. The agent will plot the behaviors that will be executed at state steps 1 and 2.
 
 The planned behavior for state step 1 corresponds to the agent's hypothesis about the next best action to take to arrive at the information it needs to resolve the problem (that is, a root cause). "What action or small bundle of actions should I execute to arrive at I wanted/expected from this turn? What code can I execute to evaluate whether I have arrived at the desired outcome?"
 
