@@ -5,7 +5,9 @@ export function gateCodeSource(args: { repoDir: string; command: string }): stri
     `const command = ${JSON.stringify(args.command)};`,
     `const cwd = ${JSON.stringify(args.repoDir)};`,
     '',
-    "const output = execSync(command, { cwd, encoding: 'utf8', stdio: 'pipe' });",
+    'const output = execSync(command, {',
+    "  cwd, encoding: 'utf8', stdio: 'pipe', timeout: 300_000,",
+    '});',
     'console.log(output || `gate passed: ${command}`);',
   ].join('\n');
 }

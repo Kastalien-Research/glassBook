@@ -137,7 +137,24 @@ function profileString(value: string): string {
 }
 
 function resolveInRepo(repoDir: string, p: string): string {
-  return Path.isAbsolute(p) ? p : Path.resolve(repoDir, p);
+  const root = Path.resolve(repoDir);
+  const resolved = Path.resolve(root, p);
+  const relative = Path.relative(root, resolved);
+
+  if (relative === '' || (!relative.startsWith('..') && !Path.isAbsolute(relative))) {
+    return resolved;
+  }
+
+  throw new Error(`Path escapes repository: ${p}`);
+}
+
+function repoRelativePath(repoDir: string, p: string): string {
+  const relative = Path.relative(Path.resolve(repoDir), p);
+  return relative === '' ? '.' : relative;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 /**
@@ -162,7 +179,7 @@ export function isAllowedWebFetchUrl(url: string): boolean {
 
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
   const host = parsed.hostname.toLowerCase();
-  if (host === 'localhost' || host === '::1') return false;
+  if (host === 'localhost' || host === '::1' || host === '[::1]') return false;
   if (host.startsWith('127.')) return false;
   if (host.startsWith('10.')) return false;
   if (host.startsWith('192.168.')) return false;
@@ -202,12 +219,18 @@ export function makeTools(repoDir: string, sessionEnv: Readonly<Record<string, s
         dir: z.string().optional().describe('Subdirectory to list (default: repo root).'),
       }),
       execute: async ({ dir }) => {
-        const target = dir ? resolveInRepo(repoDir, dir) : repoDir;
-        const res = await sh(`git ls-files -- "${target}" || ls -la "${target}"`, {
-          cwd: repoDir,
-          timeoutMs: 15_000,
-        });
-        return truncate(res.combined || '(empty)');
+        try {
+          const target = dir ? resolveInRepo(repoDir, dir) : Path.resolve(repoDir);
+          const pathspec = shellQuote(repoRelativePath(repoDir, target));
+          const fallback = shellQuote(target);
+          const res = await sh(`git ls-files -- ${pathspec} || ls -la ${fallback}`, {
+            cwd: repoDir,
+            timeoutMs: 15_000,
+          });
+          return truncate(res.combined || '(empty)');
+        } catch (e) {
+          return `ERROR listing ${dir ?? '.'}: ${e instanceof Error ? e.message : String(e)}`;
+        }
       },
     }),
 
@@ -218,13 +241,18 @@ export function makeTools(repoDir: string, sessionEnv: Readonly<Record<string, s
         path: z.string().optional().describe('Path to limit the search to.'),
       }),
       execute: async ({ pattern, path }) => {
-        const where = path ? `"${resolveInRepo(repoDir, path)}"` : '.';
-        const escaped = pattern.replace(/"/g, '\\"');
-        const res = await sh(
-          `rg -n --no-heading "${escaped}" ${where} 2>/dev/null || grep -rn "${escaped}" ${where}`,
-          { cwd: repoDir, timeoutMs: 20_000 },
-        );
-        return truncate(res.combined || '(no matches)');
+        try {
+          const where = path ? shellQuote(resolveInRepo(repoDir, path)) : '.';
+          const escaped = shellQuote(pattern);
+          const res = await sh(
+            `rg -n --no-heading -- ${escaped} ${where} 2>/dev/null || ` +
+              `grep -rn -- ${escaped} ${where}`,
+            { cwd: repoDir, timeoutMs: 20_000 },
+          );
+          return truncate(res.combined || '(no matches)');
+        } catch (e) {
+          return `ERROR searching ${path ?? '.'}: ${e instanceof Error ? e.message : String(e)}`;
+        }
       },
     }),
 

@@ -123,6 +123,62 @@ describe('sh', () => {
   });
 });
 
+describe('makeTools repo path constraints', () => {
+  let repo: string;
+  let outside: string;
+
+  beforeEach(() => {
+    repo = fs.mkdtempSync(Path.join(os.tmpdir(), 'glassbook-tools-repo-'));
+    outside = fs.mkdtempSync(Path.join(os.tmpdir(), 'glassbook-tools-outside-'));
+    fs.writeFileSync(Path.join(repo, 'inside.txt'), 'repo file\n');
+    fs.writeFileSync(Path.join(outside, 'secret.txt'), 'outside file\n');
+  });
+
+  afterEach(() => {
+    fs.rmSync(repo, { recursive: true, force: true });
+    fs.rmSync(outside, { recursive: true, force: true });
+  });
+
+  it('allows absolute paths that resolve inside the repo', async () => {
+    const tools = makeTools(repo);
+
+    const result = await (tools.readFile as any).execute({
+      path: Path.join(repo, 'inside.txt'),
+    });
+
+    expect(result).toBe('repo file\n');
+  });
+
+  it('rejects read and write paths outside the repo', async () => {
+    const tools = makeTools(repo);
+    const outsideFile = Path.join(outside, 'secret.txt');
+    const escapedWrite = Path.join(outside, 'created.txt');
+
+    const readResult = await (tools.readFile as any).execute({ path: outsideFile });
+    const writeResult = await (tools.writeFile as any).execute({
+      path: escapedWrite,
+      content: 'leak\n',
+    });
+
+    expect(readResult).toContain('escapes repository');
+    expect(writeResult).toContain('escapes repository');
+    expect(fs.existsSync(escapedWrite)).toBe(false);
+  });
+
+  it('rejects list and search paths outside the repo', async () => {
+    const tools = makeTools(repo);
+
+    const listResult = await (tools.listFiles as any).execute({ dir: '../outside' });
+    const searchResult = await (tools.searchCode as any).execute({
+      pattern: 'outside',
+      path: Path.join(outside, 'secret.txt'),
+    });
+
+    expect(listResult).toContain('escapes repository');
+    expect(searchResult).toContain('escapes repository');
+  });
+});
+
 describe('isAllowedWebFetchUrl', () => {
   it('allows public http and https URLs', () => {
     expect(isAllowedWebFetchUrl('https://example.com/docs')).toBe(true);
@@ -132,6 +188,7 @@ describe('isAllowedWebFetchUrl', () => {
   it('blocks localhost and private-network URLs', () => {
     expect(isAllowedWebFetchUrl('http://localhost:3000')).toBe(false);
     expect(isAllowedWebFetchUrl('http://127.0.0.1:3000')).toBe(false);
+    expect(isAllowedWebFetchUrl('http://[::1]:3000')).toBe(false);
     expect(isAllowedWebFetchUrl('http://10.0.0.1')).toBe(false);
     expect(isAllowedWebFetchUrl('http://192.168.1.10')).toBe(false);
     expect(isAllowedWebFetchUrl('http://172.16.0.1')).toBe(false);

@@ -3,7 +3,13 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import Path from 'node:path';
-import { createBranch, ensureGithubRemote, pushBranch, restoreCheckpoint } from './git.mjs';
+import {
+  createBranch,
+  createPullRequest,
+  ensureGithubRemote,
+  pushBranch,
+  restoreCheckpoint,
+} from './git.mjs';
 
 function git(repo: string, args: string[]): string {
   return execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim();
@@ -28,13 +34,16 @@ function makeBareRemote(): string {
 
 describe('git helpers', () => {
   let repo: string;
+  let previousPath: string | undefined;
 
   beforeEach(() => {
     repo = makeRepo();
+    previousPath = process.env.PATH;
   });
 
   afterEach(() => {
     fs.rmSync(repo, { recursive: true, force: true });
+    process.env.PATH = previousPath;
   });
 
   it('creates a suffixed branch when the requested branch already exists', async () => {
@@ -108,6 +117,39 @@ describe('git helpers', () => {
     } finally {
       fs.rmSync(remote, { recursive: true, force: true });
       fs.rmSync(other, { recursive: true, force: true });
+    }
+  });
+
+  it('passes pull request arguments without shell interpolation', async () => {
+    const binDir = fs.mkdtempSync(Path.join(os.tmpdir(), 'glassbook-fake-gh-bin-'));
+    const argsPath = Path.join(repo, 'gh-args.json');
+    const markerPath = Path.join(repo, 'shell-substitution-ran');
+    const fakeGhPath = Path.join(binDir, 'gh');
+    fs.writeFileSync(
+      fakeGhPath,
+      [
+        '#!/usr/bin/env node',
+        "const fs = require('node:fs');",
+        `fs.writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(process.argv.slice(2)));`,
+        "process.stdout.write('https://github.com/acme/repo/pull/1\\n');",
+      ].join('\n'),
+    );
+    fs.chmodSync(fakeGhPath, 0o755);
+    process.env.PATH = `${binDir}${Path.delimiter}${previousPath ?? ''}`;
+
+    try {
+      const result = await createPullRequest(repo, {
+        base: 'main',
+        head: 'feature',
+        title: `Fix $(touch ${markerPath})`,
+        body: 'body',
+      });
+
+      expect(result).toEqual({ ok: true, value: 'https://github.com/acme/repo/pull/1' });
+      expect(fs.existsSync(markerPath)).toBe(false);
+      expect(JSON.parse(fs.readFileSync(argsPath, 'utf8'))).toContain(`Fix $(touch ${markerPath})`);
+    } finally {
+      fs.rmSync(binDir, { recursive: true, force: true });
     }
   });
 });

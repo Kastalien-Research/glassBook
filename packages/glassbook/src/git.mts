@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import Path from 'node:path';
@@ -11,6 +12,43 @@ async function git(repoDir: string, cmd: string): Promise<Result<string>> {
     return err(makeError('GitError', `git ${cmd} failed (exit ${res.code}): ${detail}`));
   }
   return ok(res.stdout.trim());
+}
+
+function execFileResult(
+  command: string,
+  args: readonly string[],
+  opts: { cwd: string; timeoutMs?: number },
+): Promise<{ code: number | null; stdout: string; stderr: string; combined: string }> {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, { cwd: opts.cwd, env: process.env });
+    let stdout = '';
+    let stderr = '';
+    let combined = '';
+    const timeout =
+      opts.timeoutMs && opts.timeoutMs > 0
+        ? setTimeout(() => child.kill('SIGKILL'), opts.timeoutMs)
+        : null;
+
+    child.stdout.on('data', (d: Buffer) => {
+      const text = d.toString('utf8');
+      stdout += text;
+      combined += text;
+    });
+    child.stderr.on('data', (d: Buffer) => {
+      const text = d.toString('utf8');
+      stderr += text;
+      combined += text;
+    });
+    child.on('close', (code) => {
+      if (timeout) clearTimeout(timeout);
+      resolve({ code, stdout, stderr, combined });
+    });
+    child.on('error', (e) => {
+      if (timeout) clearTimeout(timeout);
+      const message = e instanceof Error ? e.message : String(e);
+      resolve({ code: null, stdout, stderr: stderr + message, combined: combined + message });
+    });
+  });
 }
 
 export async function ensureGitRepo(repoDir: string): Promise<Result<void>> {
@@ -170,19 +208,34 @@ export async function createPullRequest(
 ): Promise<Result<string>> {
   const tmp = Path.join(os.tmpdir(), `glassbook-pr-${Date.now()}.md`);
   await fs.writeFile(tmp, args.body, 'utf8');
-  const res = await sh(
-    `gh pr create --base "${args.base}" --head "${args.head}" --title "${args.title.replace(/"/g, '\\"')}" --body-file "${tmp}"`,
+  const res = await execFileResult(
+    'gh',
+    [
+      'pr',
+      'create',
+      '--base',
+      args.base,
+      '--head',
+      args.head,
+      '--title',
+      args.title,
+      '--body-file',
+      tmp,
+    ],
     { cwd: repoDir, timeoutMs: 120_000 },
   );
-  await fs.rm(tmp, { force: true });
 
-  if (res.code !== 0) {
-    return err(makeError('GitError', `gh pr create failed: ${res.combined.trim()}`));
+  try {
+    if (res.code !== 0) {
+      return err(makeError('GitError', `gh pr create failed: ${res.combined.trim()}`));
+    }
+    const url =
+      res.stdout
+        .trim()
+        .split('\n')
+        .find((l) => l.startsWith('http')) ?? res.stdout.trim();
+    return ok(url);
+  } finally {
+    await fs.rm(tmp, { force: true });
   }
-  const url =
-    res.stdout
-      .trim()
-      .split('\n')
-      .find((l) => l.startsWith('http')) ?? res.stdout.trim();
-  return ok(url);
 }

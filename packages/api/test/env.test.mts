@@ -9,11 +9,13 @@ describe('loadEnv', () => {
   let dir: string;
   let cwd: string;
   let previous: string | undefined;
+  let previousLoadEnvFile: unknown;
 
   beforeEach(() => {
     dir = fs.mkdtempSync(Path.join(os.tmpdir(), 'srcbook-env-'));
     cwd = process.cwd();
     previous = process.env[ENV_KEY];
+    previousLoadEnvFile = (process as any).loadEnvFile;
     delete process.env[ENV_KEY];
   });
 
@@ -25,6 +27,7 @@ describe('loadEnv', () => {
     } else {
       process.env[ENV_KEY] = previous;
     }
+    (process as any).loadEnvFile = previousLoadEnvFile;
   });
 
   it('loads cwd .env when no explicit path is provided', async () => {
@@ -48,6 +51,18 @@ describe('loadEnv', () => {
 
     expect(loadEnv(explicitPath)).toBe(explicitPath);
     expect(process.env[ENV_KEY]).toBe('from-explicit');
+  });
+
+  it('loads env files without process.loadEnvFile for Node 18 compatibility', async () => {
+    const envPath = Path.join(dir, '.env');
+    fs.writeFileSync(envPath, `${ENV_KEY}=node18\n`);
+    process.chdir(dir);
+    (process as any).loadEnvFile = undefined;
+
+    const { loadEnv } = await import('../env.mjs');
+
+    expect(fs.realpathSync(loadEnv() ?? '')).toBe(fs.realpathSync(envPath));
+    expect(process.env[ENV_KEY]).toBe('node18');
   });
 });
 

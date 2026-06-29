@@ -9,4 +9,10 @@ describe('gateCodeSource', () => {
     expect(source).toContain('const command = "npm test"');
     expect(source).toContain('execSync(command');
   });
+
+  it('applies a timeout to gate command execution', () => {
+    const source = gateCodeSource({ repoDir: '/tmp/repo', command: 'vitest --watch' });
+
+    expect(source).toContain('timeout: 300_000');
+  });
 });
