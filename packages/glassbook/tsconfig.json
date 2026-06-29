@@ -6,5 +6,5 @@
     "outDir": "dist"
   },
   "include": ["src/**/*.mts", "bin/**/*.mts"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": ["node_modules", "dist", "src/**/*.test.mts", "vitest.config.mts"]
 }

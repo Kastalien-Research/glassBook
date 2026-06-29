@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { sh } from '../tools.mjs';
+import { runGates as runGatesPure, type ShRunner } from '../gates.mjs';
 import { runToolSubagent, runPlanSubagent } from '../subagent.mjs';
 import { commitAll, headHash, isClean } from '../git.mjs';
 import { budgetRemaining, consumeBudget, type SectionContext } from '../context.mjs';
@@ -30,23 +31,13 @@ interface GateResult {
 }
 
 async function runGates(ctx: SectionContext, gates: GateConditionSpec[]): Promise<GateResult> {
-  if (gates.length === 0) {
-    return {
-      passed: false,
-      output: 'No gate conditions were defined, so the desired state cannot be verified.',
-    };
-  }
-  let allPass = true;
-  const chunks: string[] = [];
-  for (const g of gates) {
-    const res = await sh(g.command, { cwd: ctx.repoDir, timeoutMs: 300_000 });
-    const pass = res.code === 0;
-    allPass = allPass && pass;
-    chunks.push(
-      `# gate: ${g.id} (${pass ? 'PASS' : 'FAIL'}, exit ${res.code})\n$ ${g.command}\n${res.combined.trim()}`,
-    );
-  }
-  return { passed: allPass, output: chunks.join('\n\n') };
+  const run: ShRunner = (command) =>
+    sh(command, { cwd: ctx.repoDir, timeoutMs: 300_000 }).then((r) => ({
+      code: r.code,
+      combined: r.combined,
+    }));
+  const outcome = await runGatesPure(gates, run);
+  return { passed: outcome.passed, output: outcome.output };
 }
 
 async function captureDiff(ctx: SectionContext): Promise<string> {
@@ -121,7 +112,10 @@ async function commitIfDirty(ctx: SectionContext, message: string): Promise<bool
 async function resetToLastCheckpoint(ctx: SectionContext): Promise<void> {
   const last = ctx.state.checkpoints[ctx.state.checkpoints.length - 1];
   if (last) {
-    await sh(`git reset --hard "${last}" && git clean -fd`, { cwd: ctx.repoDir, timeoutMs: 60_000 });
+    await sh(`git reset --hard "${last}" && git clean -fd`, {
+      cwd: ctx.repoDir,
+      timeoutMs: 60_000,
+    });
   }
 }
 

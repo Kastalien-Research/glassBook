@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 const MAX_OUTPUT_CHARS = 20_000;
 
-function truncate(text: string, max: number = MAX_OUTPUT_CHARS): string {
+export function truncate(text: string, max: number = MAX_OUTPUT_CHARS): string {
   if (text.length <= max) return text;
   const head = text.slice(0, max);
   return `${head}\n... [truncated ${text.length - max} chars]`;

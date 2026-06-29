@@ -8,6 +8,7 @@
     "build": "turbo build",
     "test": "turbo test",
     "lint": "turbo lint",
+    "check-types": "turbo check-types",
     "check-format": "prettier --check .",
     "format": "prettier --write .",
     "generate": "pnpm --filter api generate",

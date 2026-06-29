@@ -17,7 +17,9 @@
     "dev": "tsc --incremental --watch --project .",
     "start": "node ./dist/bin/cli.mjs",
     "lint": "eslint . --max-warnings 0",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@srcbook/api": "workspace:^",
@@ -29,7 +31,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.5.4",
-    "rimraf": "^6.0.1"
+    "rimraf": "^6.0.1",
+    "vitest": "^2.0.5"
   },
   "engines": {
     "node": ">=18"
