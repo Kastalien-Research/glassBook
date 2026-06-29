@@ -1,0 +1,10 @@
+{
+  "extends": "@srcbook/configs/ts/base.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "allowImportingTsExtensions": false,
+    "outDir": "dist"
+  },
+  "include": ["src/**/*.mts", "bin/**/*.mts"],
+  "exclude": ["node_modules", "dist", "src/**/*.test.mts", "vitest.config.mts"]
+}

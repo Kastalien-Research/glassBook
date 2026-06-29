@@ -27,6 +27,7 @@ srcbook-api-*.tgz
 
 *.gitignored.*
 
+.env
 packages/api/.env
 packages/api/*.local
 

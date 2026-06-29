@@ -10,12 +10,12 @@ export const AiProvider = {
 export type AiProviderType = (typeof AiProvider)[keyof typeof AiProvider];
 
 export const defaultModels: Record<AiProviderType, string> = {
-  [AiProvider.OpenAI]: 'chatgpt-4o-latest',
-  [AiProvider.Anthropic]: 'claude-3-5-sonnet-latest',
+  [AiProvider.OpenAI]: 'gpt-5.5',
+  [AiProvider.Anthropic]: 'claude-haiku-4-5',
   [AiProvider.Custom]: 'mistral-nemo',
-  [AiProvider.XAI]: 'grok-beta',
-  [AiProvider.Gemini]: 'gemini-1.5-pro-latest',
-  [AiProvider.OpenRouter]: 'anthropic/claude-3-opus-20240229',
+  [AiProvider.XAI]: 'grok-4.3',
+  [AiProvider.Gemini]: 'gemini-3.5-flash',
+  [AiProvider.OpenRouter]: 'anthropic/claude-haiku-4-5',
 } as const;
 
 export function isValidProvider(provider: string): provider is AiProviderType {

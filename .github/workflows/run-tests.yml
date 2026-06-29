@@ -44,7 +44,7 @@ jobs:
         run: pnpm build
 
       - name: Lint & Check
-        run: pnpm lint && pnpm check-format
+        run: pnpm lint && pnpm check-format && pnpm check-types
 
       - name: Test
         run: pnpm test

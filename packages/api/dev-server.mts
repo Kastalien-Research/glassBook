@@ -1,10 +1,15 @@
 import http from 'node:http';
 import { WebSocketServer as WsWebSocketServer } from 'ws';
-
-import app from './server/http.mjs';
-import webSocketServer from './server/ws.mjs';
+import { loadEnv } from './env.mjs';
 
 export { SRCBOOK_DIR } from './constants.mjs';
+
+loadEnv();
+
+const [{ default: app }, { default: webSocketServer }] = await Promise.all([
+  import('./server/http.mjs'),
+  import('./server/ws.mjs'),
+]);
 
 const server = http.createServer(app);
 

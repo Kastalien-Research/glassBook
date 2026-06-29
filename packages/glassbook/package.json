@@ -1,0 +1,41 @@
+{
+  "name": "@kastalien-research/glassbook",
+  "version": "0.0.0",
+  "description": "glassBook: a notebook that is an agent. Headless EpiOps notebook-agent runtime built on Srcbook.",
+  "type": "module",
+  "main": "./dist/src/index.mjs",
+  "types": "./dist/src/index.d.mts",
+  "bin": {
+    "glassbook": "./dist/bin/cli.mjs"
+  },
+  "files": [
+    "dist/**"
+  ],
+  "scripts": {
+    "prebuild": "rimraf ./dist",
+    "build": "tsc",
+    "dev": "tsc --incremental --watch --project .",
+    "start": "node ./dist/bin/cli.mjs",
+    "lint": "eslint . --max-warnings 0",
+    "check-types": "pnpm --filter @srcbook/api build && tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@srcbook/api": "workspace:^",
+    "@srcbook/shared": "workspace:^",
+    "ai": "catalog:",
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "effect": "3.21.4",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.4",
+    "rimraf": "^6.0.1",
+    "vitest": "^2.0.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
