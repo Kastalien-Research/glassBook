@@ -11,60 +11,73 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
  */
 export async function getModel(): Promise<LanguageModel> {
   const config = await getConfig();
-  const { aiModel, aiProvider, aiBaseUrl } = config;
-  const model = aiModel || getDefaultModel(aiProvider as AiProviderType);
-  switch (aiProvider as AiProviderType) {
-    case 'openai':
-      if (!config.openaiKey) {
+
+  // Environment variables take precedence over the SQLite config. This is what
+  // makes a `.env` file work for headless runs (e.g. glassBook) without the web
+  // settings UI. The AI SDK providers also read some of these by default, but we
+  // resolve them explicitly so the "key is not set" checks stay accurate.
+  const provider =
+    (process.env.SRCBOOK_AI_PROVIDER as AiProviderType | undefined) ||
+    (config.aiProvider as AiProviderType);
+  const model = process.env.SRCBOOK_AI_MODEL || config.aiModel || getDefaultModel(provider);
+  const aiBaseUrl = process.env.SRCBOOK_AI_BASE_URL || config.aiBaseUrl;
+
+  const openaiKey = process.env.OPENAI_API_KEY || config.openaiKey;
+  const anthropicKey = process.env.ANTHROPIC_API_KEY || config.anthropicKey;
+  const geminiKey = process.env.GEMINI_API_KEY || config.geminiKey;
+  const xaiKey = process.env.XAI_API_KEY || config.xaiKey;
+  const openrouterKey = process.env.OPENROUTER_API_KEY || config.openrouterKey;
+  const customApiKey = process.env.SRCBOOK_CUSTOM_API_KEY || config.customApiKey;
+
+  switch (provider) {
+    case 'openai': {
+      if (!openaiKey) {
         throw new Error('OpenAI API key is not set');
       }
-      const openai = createOpenAI({
-        apiKey: config.openaiKey,
-      });
-      return openai.chat(model);
+      return createOpenAI({ apiKey: openaiKey }).chat(model);
+    }
 
-    case 'anthropic':
-      if (!config.anthropicKey) {
+    case 'anthropic': {
+      if (!anthropicKey) {
         throw new Error('Anthropic API key is not set');
       }
-      const anthropic = createAnthropic({ apiKey: config.anthropicKey });
-      return anthropic(model);
+      return createAnthropic({ apiKey: anthropicKey })(model);
+    }
 
-    case 'Gemini':
-      if (!config.geminiKey) {
+    case 'Gemini': {
+      if (!geminiKey) {
         throw new Error('Gemini API key is not set');
       }
-      const google = createGoogleGenerativeAI({ apiKey: config.geminiKey });
-      return google(model) as LanguageModel;
+      return createGoogleGenerativeAI({ apiKey: geminiKey })(model) as LanguageModel;
+    }
 
-    case 'Xai':
-      if (!config.xaiKey) {
+    case 'Xai': {
+      if (!xaiKey) {
         throw new Error('Xai API key is not set');
       }
-      const xai = createOpenAI({
-        baseURL: 'https://api.x.ai/v1',
-        apiKey: config.xaiKey,
-      });
-      return xai.chat(model);
+      return createOpenAI({ baseURL: 'https://api.x.ai/v1', apiKey: xaiKey }).chat(model);
+    }
 
-    case 'openrouter':
-      if (!config.openrouterKey) {
+    case 'openrouter': {
+      if (!openrouterKey) {
         throw new Error('OpenRouter API key is not set');
       }
-      const openrouter = createOpenAI({
-        baseURL: 'https://openrouter.ai/api/v1',
-        apiKey: config.openrouterKey,
-      });
-      return openrouter.chat(model);
+      return createOpenAI({ baseURL: 'https://openrouter.ai/api/v1', apiKey: openrouterKey }).chat(
+        model,
+      );
+    }
 
-    case 'custom':
+    case 'custom': {
       if (typeof aiBaseUrl !== 'string') {
         throw new Error('Local AI base URL is not set');
       }
-      const openaiCompatible = createOpenAI({
-        apiKey: config.customApiKey || 'bogus', // use custom API key if set, otherwise use a bogus key
-        baseURL: aiBaseUrl,
-      });
-      return openaiCompatible.chat(model);
+      // use custom API key if set, otherwise use a bogus key
+      return createOpenAI({ apiKey: customApiKey || 'bogus', baseURL: aiBaseUrl }).chat(model);
+    }
+
+    default: {
+      const _exhaustive: never = provider;
+      throw new Error(`Unknown AI provider: ${String(_exhaustive)}`);
+    }
   }
 }

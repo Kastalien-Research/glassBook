@@ -8,11 +8,8 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-dist
 dist-ssr
 *.local
-
-srcbook-api-*.tgz
 
 # Editor directories and files
 .vscode/*
@@ -26,24 +23,3 @@ srcbook-api-*.tgz
 *.sw?
 
 *.gitignored.*
-
-.env
-packages/api/.env
-packages/api/*.local
-
-srcbook/public/**/*
-!srcbook/public/.gitkeep
-
-srcbook/lib/**/*
-!srcbook/lib/.gitkeep
-
-# turbo
-**/.turbo
-
-# Aide
-*.code-workspace
-
-# Docs folder
-docs/
-
-vite.config.ts.timestamp-*.mjs
