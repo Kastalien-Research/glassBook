@@ -32,7 +32,9 @@ Consolidated list of everything **not finished**, including items explicitly **d
 - [x] **Phase 2 marked ✅ but `generateObject → Output.object` (Task 2.4) is NOT done.** Fixed: `src/subagent.mts` now uses `generateText` + `Output.object`, covered by `src/subagent.test.mts`.
 - [x] **Phase 4 marked 🟡 "foundation" — but the kernel is not imported anywhere.** Fixed at the live-loop boundary: `src/epiops/ulysses.mts` now drives execution through `runGamespace`, covered by `src/epiops/ulysses.test.mts`.
 - [x] **Phase 6 marked ✅ but Theseus/Hephaestus/Ariadne were still routed through Ulysses.** Fixed on `feat/complete-codebase-protocols`: `src/sections/work-execution.mts` now dispatches through `src/epiops/codebase-runner.mts`, non-Ulysses protocols emit protocol-specific packets, and `src/sections/work-execution.test.mts` covers dispatch and packet metadata.
-- [ ] **Phase 6 live verification for the latest non-Ulysses code is incomplete.** Unit/package checks pass, and earlier throwaway runs proved Ulysses and Theseus. The current Hephaestus/Ariadne live proofs are blocked until a usable provider credential is available; local config now returns provider authentication errors before `workPlan`.
+- [x] **Phase 6 live verification for the latest non-Ulysses code is complete.** Current-code
+  Ulysses, Theseus, Hephaestus, and Ariadne live `--skip-pr` runs have produced notebooks,
+  sidecars, protocol packet data, gate/evaluator evidence, and evaluator approval.
 
 ---
 
@@ -81,7 +83,8 @@ Consolidated list of everything **not finished**, including items explicitly **d
 - [x] Load `workflows/epiops_protocols/*` (+ `ulysses.md`) as typed protocol definitions (entities, behavior/evaluator schema, transitions, emit-packet schema). _Done: `epiops/protocols/source.mts` parses the four executable codebase markdown protocols, and `work-plan.mts` includes the source-derived schema in planner prompts._
 - [x] `workPlan` really chooses among ≥4 protocols (today fixed to `ulysses`).
 - [x] Wire Theseus, Hephaestus, Ariadne as runnable codebase-family protocol paths, each emitting its packet. _Done: `codebase-runner.mts` gives Theseus an equivalence/transformation packet, Hephaestus a reproduction packet, and Ariadne a read-only topology packet; `ExecutionResult.packet` persists and PR rendering includes packet details._
-- [ ] Complete current-code live `--skip-pr` verification for Hephaestus and Ariadne after provider credentials are repaired.
+- [x] Complete current-code live `--skip-pr` verification for Hephaestus and Ariadne. _Done:
+  throwaway runs now approve with persisted notebook/sidecar packet evidence._
 - [x] Destructive-reset hardening for CONSIDERATION (`git reset --hard` / `git clean -fd`).
 
 ### Phase 7 — Git/GitHub robustness ✅

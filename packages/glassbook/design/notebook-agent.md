@@ -77,8 +77,8 @@ glassBook is the **codebase-change / PR-repair** instantiation of the notebook a
 - **Protocol-specific codebase workflows.** Ulysses, Theseus, Hephaestus, and Ariadne are selected
   by `workPlan` and dispatched through codebase-family execution paths. The run persists the
   selected protocol, verification summary, and protocol packet (`fix`, `transformation`,
-  `reproduction`, or `topology`) into `glassbook.json` and the PR body. Current live verification for
-  the latest non-Ulysses paths is tracked separately in `UNFINISHED.md`.
+  `reproduction`, or `topology`) into `glassbook.json` and the PR body. Current live `--skip-pr`
+  verification exists for all four codebase-family paths.
 
 ### Where glassBook diverges (be honest about this)
 

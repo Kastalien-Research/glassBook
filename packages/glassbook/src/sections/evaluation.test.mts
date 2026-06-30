@@ -44,6 +44,7 @@ function makeContext(): SectionContext {
   const config = makeConfig();
   const state = initialState(config);
   state.workingBranch = 'glassbook/run';
+  state.notebookDir = '/tmp/glassbook-notebook';
   return {
     config,
     state,
@@ -125,6 +126,27 @@ describe('runEvaluation', () => {
     expect(mocks.runToolSubagent).toHaveBeenCalledWith(
       expect.objectContaining({
         prompt: expect.stringContaining('treat this JSON as the emitted sidecar/notebook packet'),
+      }),
+    );
+    expect(mocks.runToolSubagent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining(
+          'glassBook sidecar: /tmp/glassbook-notebook/glassbook.json',
+        ),
+      }),
+    );
+    expect(mocks.runToolSubagent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining(
+          'The target repository is not expected to contain glassbook.json',
+        ),
+      }),
+    );
+    expect(mocks.runPlanSubagent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining(
+          'not a target-repository file',
+        ),
       }),
     );
   });

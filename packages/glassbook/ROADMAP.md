@@ -27,12 +27,12 @@ Restore point: `feat/glassbook-v0 @ e054499` (validated v0). All work below is o
   `ProtocolDefinition` contract), then wired into the live Ulysses path.
 - ✅ **Phase 5 — Executable + replay.** Gate code cells execute through the
   notebook runtime; replay commands consume `glassbook.json`.
-- 🟡 **Phase 6 — Protocol library integration.** `workPlan` selects the
+- ✅ **Phase 6 — Protocol library integration.** `workPlan` selects the
   codebase-family protocols and `workExecution` now dispatches Ulysses,
   Theseus, Hephaestus, and Ariadne through protocol-specific execution paths
-  that emit run packets. Unit/package checks are green; current live proof is
-  incomplete for the latest code because available provider credentials are
-  rejected.
+  that emit run packets. Unit/package checks are green, and all four
+  codebase-family protocols have current live `--skip-pr` proofs with
+  notebook/sidecar packet data, gate evidence, and evaluator approval.
 - ✅ **Phases 0, 7, 8, 9.** Papercuts, git robustness, sandbox/security, and the
   Effect boundary are tracked in `UNFINISHED.md` with verification notes.
 

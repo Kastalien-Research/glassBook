@@ -7,9 +7,9 @@ Snapshot of what is and isn't operational after the v0 build pass.
 - **Package:** `@kastalien-research/glassbook` (`packages/glassbook`)
 - **Validated by:** one full live run (root-cause-and-fix on a throwaway repo, real GitHub PR). The pipeline produced a correct minimal fix, an adversarial approval, and an opened PR.
 - **Current follow-up:** `feat/complete-codebase-protocols` adds protocol-specific work-execution
-  dispatch and packets for Theseus, Hephaestus, and Ariadne; see `UNFINISHED.md` for current
-  verification status. Latest package checks are green, but current-code Hephaestus/Ariadne live
-  proofs still require a usable provider credential.
+  dispatch and packets for Theseus, Hephaestus, and Ariadne. Current-code Ulysses, Theseus,
+  Hephaestus, and Ariadne live `--skip-pr` proofs have produced notebooks, sidecars, packet data,
+  gate/evaluator evidence, and evaluator approval.
 
 **Legend:** ✅ operational · 🟡 partial / simplified · 🟥 stub / not implemented
 
@@ -175,8 +175,6 @@ The conceptual core is implemented; several spec details from `workflows/ulysses
 3. Replay tooling that consumes `glassbook.json` (re-run notebook / re-run evaluation).
 4. Separate (stronger) reviewer model; per-role model selection.
 5. Real fan-out research (multiple cells up to budget).
-6. Complete current-code live `--skip-pr` verification for Hephaestus and Ariadne once provider
-   credentials are repaired.
-7. Decide whether non-codebase protocols (Hermes, Minos, Cassandra, Janus) should enter scope.
-8. Keep protocol packets evolving from deterministic summaries toward richer source-derived
+6. Decide whether non-codebase protocols (Hermes, Minos, Cassandra, Janus) should enter scope.
+7. Keep protocol packets evolving from deterministic summaries toward richer source-derived
    schemas as new workflows demand them.
