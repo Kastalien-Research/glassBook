@@ -16,15 +16,68 @@ import { createSrcbook, removeSrcbook } from '../srcbook/index.mjs';
 import { node, tsx } from '../exec.mjs';
 import { pathToCodeFile, pathToReadme } from '../srcbook/path.mjs';
 import { type CodeLanguageType, type CodeCellType, type MarkdownCellType } from '@srcbook/shared';
+import {
+  askGlassbookContext,
+  executeGlassbookContext,
+  listGlassbookContexts,
+  readGlassbookContext,
+} from './glassbook-context.mjs';
 
-// Create the global MCP Server instance
-export const mcpServer = new McpServer({
+const mcpServerConfig = {
   name: 'srcbook-notebook-server',
   version: '1.0.0',
-});
+};
+
+// Create the global MCP Server instance used by direct in-process callers/tests.
+export const mcpServer = new McpServer(mcpServerConfig);
 
 // Registry to track streamable HTTP transports
 export const activeHttpTransports = new Map<string, StreamableHTTPServerTransport>();
+export const activeMcpServers = new Map<string, McpServer>();
+
+export function createMcpServer(): McpServer {
+  const server = new McpServer(mcpServerConfig);
+  cloneRegisteredSurface(mcpServer, server);
+  registerSolveProblemPrompt(server);
+  return server;
+}
+
+function cloneRegisteredSurface(source: McpServer, target: McpServer): void {
+  const sourceServer = source as any;
+  const targetServer = target as any;
+
+  for (const [name, tool] of Object.entries(sourceServer._registeredTools ?? {}) as [
+    string,
+    any,
+  ][]) {
+    const config = omitNullish({
+      title: tool.title,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+      outputSchema: tool.outputSchema,
+      annotations: tool.annotations,
+      _meta: tool._meta,
+    });
+    targetServer.registerTool(name, config, tool.handler);
+  }
+
+  for (const [name, resource] of Object.entries(
+    sourceServer._registeredResourceTemplates ?? {},
+  ) as [string, any][]) {
+    targetServer.registerResource(
+      name,
+      resource.resourceTemplate,
+      resource.metadata,
+      resource.readCallback,
+    );
+  }
+}
+
+function omitNullish<T extends Record<string, unknown>>(value: T): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== null && entry !== undefined),
+  );
+}
 
 // Expose Notebook CRUD & Execution as Tools
 mcpServer.registerTool(
@@ -391,6 +444,151 @@ mcpServer.registerTool(
   },
 );
 
+// glassBook recursive context projection tools.
+mcpServer.registerTool(
+  'list-glassbook-contexts',
+  {
+    title: 'List glassBook Contexts',
+    description: 'Lists saved glassBook notebook/sidecar contexts.',
+    inputSchema: z.object({}),
+  },
+  async () => {
+    try {
+      const result = await listGlassbookContexts();
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error: any) {
+      return {
+        content: [
+          { type: 'text', text: `Failed to list glassBook contexts: ${error?.message || error}` },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+mcpServer.registerTool(
+  'read-glassbook-context',
+  {
+    title: 'Read glassBook Context',
+    description: 'Reads saved glassBook sidecar/notebook context by notebook ID.',
+    inputSchema: z.object({
+      id: z.string().describe('The saved Srcbook notebook ID containing glassbook.json'),
+      includeSidecar: z.boolean().optional().default(true),
+      includeNotebook: z.boolean().optional().default(true),
+    }),
+  },
+  async ({ id, includeSidecar, includeNotebook }) => {
+    try {
+      const result = await readGlassbookContext({
+        id,
+        includeSidecar: includeSidecar ?? true,
+        includeNotebook: includeNotebook ?? true,
+      });
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error: any) {
+      return {
+        content: [
+          { type: 'text', text: `Failed to read glassBook context: ${error?.message || error}` },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+mcpServer.registerTool(
+  'ask-glassbook-context',
+  {
+    title: 'Ask glassBook Context',
+    description: 'Asks a cited, read-only question over saved glassBook context.',
+    inputSchema: z.object({
+      id: z.string().describe('The saved Srcbook notebook ID containing glassbook.json'),
+      question: z.string().min(1).describe('Question to answer from the saved context'),
+      selectors: z
+        .array(
+          z.object({
+            query: z.string().optional(),
+            cellIds: z.array(z.string()).optional(),
+            maxSpans: z.number().int().positive().optional(),
+            maxCharsPerSpan: z.number().int().positive().optional(),
+          }),
+        )
+        .optional(),
+      maxTokens: z.number().int().positive().optional(),
+    }),
+  },
+  async ({ id, question, selectors, maxTokens }) => {
+    try {
+      const result = await askGlassbookContext({ id, question, selectors, maxTokens });
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        isError: result.status === 'failed',
+      };
+    } catch (error: any) {
+      return {
+        content: [
+          { type: 'text', text: `Failed to ask glassBook context: ${error?.message || error}` },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+mcpServer.registerTool(
+  'execute-glassbook-context',
+  {
+    title: 'Execute glassBook Context',
+    description:
+      'Executes caller code in a temporary scratchpad containing selected saved glassBook context files.',
+    inputSchema: z.object({
+      id: z.string().describe('The saved Srcbook notebook ID containing glassbook.json'),
+      code: z.string().min(1).describe('Code to execute against materialized context files'),
+      language: z.enum(['typescript', 'javascript']).default('typescript'),
+      selectors: z
+        .array(
+          z.object({
+            query: z.string().optional(),
+            cellIds: z.array(z.string()).optional(),
+            maxSpans: z.number().int().positive().optional(),
+            maxCharsPerSpan: z.number().int().positive().optional(),
+          }),
+        )
+        .optional(),
+      timeoutMs: z.number().int().positive().optional(),
+    }),
+  },
+  async ({ id, code, language, selectors, timeoutMs }) => {
+    try {
+      const result = await executeGlassbookContext({
+        id,
+        code,
+        language: language as CodeLanguageType,
+        selectors,
+        timeoutMs,
+      });
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error: any) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Failed to execute glassBook context: ${error?.message || error}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
 // Register Resources for viewing notebook cells and files
 mcpServer.registerResource(
   'notebook-readme',
@@ -428,27 +626,63 @@ mcpServer.registerResource(
   },
 );
 
-// Register Prompts
-mcpServer.registerPrompt(
-  'solve-problem',
-  {
-    title: 'Solve coding problem in a cell',
-    description:
-      'Creates a prompt to help solve a specific programming question or requirement inside a notebook cell.',
-    argsSchema: {
-      problem: z.string().describe('The programming task or problem description'),
-      language: z.enum(['typescript', 'javascript']).default('typescript'),
+mcpServer.registerResource(
+  'glassbook-context',
+  new ResourceTemplate('glassbook://{id}/context', {
+    list: async () => {
+      const contexts = await listGlassbookContexts();
+      return {
+        resources: contexts.map((context) => ({
+          uri: `glassbook://${context.id}/context`,
+          name: `glassBook context ${context.id}`,
+        })),
+      };
     },
-  },
-  ({ problem, language }) => ({
-    messages: [
-      {
-        role: 'user' as const,
-        content: {
-          type: 'text' as const,
-          text: `Please generate a clean, modular code block in ${language} to solve the following requirement. Explain the approach briefly, and output ONLY valid code within a markdown block.\n\nRequirement:\n${problem}`,
-        },
-      },
-    ],
   }),
+  {
+    title: 'glassBook Context',
+    description: 'Retrieves saved glassBook sidecar/notebook context metadata.',
+    mimeType: 'application/json',
+  },
+  async (uri, { id }) => {
+    try {
+      const idStr = Array.isArray(id) ? id[0] : id;
+      if (!idStr) throw new Error('ID is required');
+      const context = await readGlassbookContext({ id: idStr });
+      return {
+        contents: [{ uri: uri.href, text: JSON.stringify(context, null, 2) }],
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to read glassBook context: ${error?.message || error}`);
+    }
+  },
 );
+
+// Register Prompts
+registerSolveProblemPrompt(mcpServer);
+
+function registerSolveProblemPrompt(server: McpServer): void {
+  server.registerPrompt(
+    'solve-problem',
+    {
+      title: 'Solve coding problem in a cell',
+      description:
+        'Creates a prompt to help solve a specific programming question or requirement inside a notebook cell.',
+      argsSchema: {
+        problem: z.string().describe('The programming task or problem description'),
+        language: z.enum(['typescript', 'javascript']).default('typescript'),
+      },
+    },
+    ({ problem, language }) => ({
+      messages: [
+        {
+          role: 'user' as const,
+          content: {
+            type: 'text' as const,
+            text: `Please generate a clean, modular code block in ${language} to solve the following requirement. Explain the approach briefly, and output ONLY valid code within a markdown block.\n\nRequirement:\n${problem}`,
+          },
+        },
+      ],
+    }),
+  );
+}

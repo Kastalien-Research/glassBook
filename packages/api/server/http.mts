@@ -35,7 +35,7 @@ import { readdir } from '../fs-utils.mjs';
 import { EXAMPLE_SRCBOOKS } from '../srcbook/examples.mjs';
 import { pathToSrcbook } from '../srcbook/path.mjs';
 import { isSrcmdPath } from '../srcmd/paths.mjs';
-import { mcpServer, activeHttpTransports } from '../mcp/server.mjs';
+import { activeHttpTransports, activeMcpServers, createMcpServer } from '../mcp/server.mjs';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { randomUUID } from 'node:crypto';
 import { requireMcpBearerToken } from './mcp-auth.mjs';
@@ -405,14 +405,23 @@ router.all('/mcp', requireLocalMcpRequest, requireMcpBearerToken, cors(), async 
 
   let transport = sessionId ? activeHttpTransports.get(sessionId) : undefined;
   if (!transport) {
+    const server = createMcpServer();
     transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (id) => {
         console.log(`[MCP Server] Session initialized: ${id}`);
         activeHttpTransports.set(id, transport!);
+        activeMcpServers.set(id, server);
       },
     });
-    await mcpServer.connect(transport);
+    transport.onclose = () => {
+      const closedSessionId = transport?.sessionId;
+      if (closedSessionId) {
+        activeHttpTransports.delete(closedSessionId);
+        activeMcpServers.delete(closedSessionId);
+      }
+    };
+    await server.connect(transport);
   }
 
   await transport.handleRequest(req, res, req.body);

@@ -1,0 +1,4 @@
+{
+  "include": ["src/**/*.mts", "vitest.config.mts"],
+  "exclude": ["node_modules", "dist"]
+}

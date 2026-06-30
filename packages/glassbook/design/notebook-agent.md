@@ -72,6 +72,10 @@ glassBook is the **codebase-change / PR-repair** instantiation of the notebook a
   evaluator grades each behavior; a final adversarial reward-hacking review gates the PR.
 - **State + replay.** `GlassbookState` tracks the run; `glassbook replay` / `replay-evaluation`
   re-run saved gates from the sidecar.
+- **Recursive context.** The shared `@kastalien-research/glassbook-context` core provides an
+  RLM-inspired, cited child-query primitive over notebook/sidecar/repo-snapshot context. glassBook
+  uses it in-process for Research, persists calls in `glassbook.json`, and Srcbook MCP projects saved
+  contexts through list/read/ask/execute tools (see `recursive-context.md`).
 - **Artifact + provenance.** The artifact is a real GitHub PR whose body is generated from the run
   (gates, research, execution, evaluation, checkpoints, kernel turns, usage).
 - **Protocol-specific codebase workflows.** Ulysses, Theseus, Hephaestus, and Ariadne are selected

@@ -106,8 +106,10 @@ export async function runGlassbook(
   // 3. Research
   const researchR = await runResultSection('research', () => runResearch(ctx, finalPlan));
   if (!researchR.ok) return fail(researchR.error);
-  const research = researchR.value;
+  const research = researchR.value.findings;
   state.research = research;
+  state.recursiveContextCalls.push(...researchR.value.recursiveContextCalls);
+  state.glassbookCells.push(...researchR.value.glassbookCells);
 
   // 4. Work plan
   const wpR = await runResultSection('workPlan', () => runWorkPlan(ctx, finalPlan, research));

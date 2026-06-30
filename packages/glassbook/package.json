@@ -22,6 +22,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@kastalien-research/glassbook-context": "workspace:^",
     "@srcbook/api": "workspace:^",
     "@srcbook/shared": "workspace:^",
     "ai": "catalog:",

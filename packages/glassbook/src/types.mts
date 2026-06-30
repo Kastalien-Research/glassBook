@@ -7,6 +7,7 @@ import type {
 } from './schemas.mjs';
 import type { ForbiddenBehavior, TurnRecord } from './epiops/kernel/index.mjs';
 import type { GlassbookCell } from './cell.mjs';
+import type { RecursiveContextCall } from './recursive-context.mjs';
 
 /**
  * Failure model (Effect-spirit, vanilla TS).
@@ -144,6 +145,8 @@ export interface GlassbookState {
   forbiddenBehaviors?: ForbiddenBehavior[];
   /** Typed input-processing-output cells emitted by sections. */
   glassbookCells: GlassbookCell[];
+  /** Auditable RLM-style child context calls made over notebook/state context. */
+  recursiveContextCalls: RecursiveContextCall[];
   /** The working branch the protocol operates on. */
   workingBranch?: string;
   /** PR url, when opened. */
@@ -161,6 +164,7 @@ export function initialState(config: RunConfig): GlassbookState {
     budgets: config.budgets,
     checkpoints: [],
     glassbookCells: [],
+    recursiveContextCalls: [],
     failures: [],
   };
 }
