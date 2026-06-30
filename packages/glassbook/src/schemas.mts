@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { CodebaseProtocolPacket } from './epiops/protocols/types.mjs';
 
 /**
  * Structured outputs produced by the planning/evaluation subagents.
@@ -90,8 +91,20 @@ export const ExecutionResultSchema = z.object({
     .describe('Whether the gate/verification confirms the desired state.'),
   evidence: z.string().describe('Narrative evidence supporting the boolean.'),
   testOutput: z.string().describe('Raw output of the verification command(s).'),
+  protocol: EpiOpsProcessIdSchema.optional().describe('The protocol that produced this result.'),
+  packet: z.unknown().optional().describe('Protocol-specific emit packet persisted for audit.'),
+  verification: z
+    .object({
+      baselinePassed: z.boolean().optional(),
+      finalPassed: z.boolean(),
+      commands: z.array(z.string()),
+    })
+    .optional()
+    .describe('Protocol verification summary.'),
 });
-export type ExecutionResult = z.infer<typeof ExecutionResultSchema>;
+export type ExecutionResult = Omit<z.infer<typeof ExecutionResultSchema>, 'packet'> & {
+  readonly packet?: CodebaseProtocolPacket;
+};
 
 // ---------------------------------------------------------------------------
 // Section 6 - Evaluation (adversarial reviewer)

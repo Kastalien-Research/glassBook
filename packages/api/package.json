@@ -19,7 +19,8 @@
   ],
   "scripts": {
     "dev": "vite-node -w dev-server.mts",
-    "test": "vitest",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "prebuild": "rm -rf ./dist",
     "build": "tsc && cp -R ./drizzle ./dist/drizzle && cp -R ./srcbook/examples ./dist/srcbook/examples && cp -R ./prompts ./dist/prompts",
     "lint": "eslint . --max-warnings 0",
@@ -36,6 +37,7 @@
     "@ai-sdk/google": "catalog:",
     "@ai-sdk/openai": "catalog:",
     "@ai-sdk/provider": "catalog:",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@srcbook/shared": "workspace:^",
     "ai": "catalog:",
     "better-sqlite3": "^11.3.0",

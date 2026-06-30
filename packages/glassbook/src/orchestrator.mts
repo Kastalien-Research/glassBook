@@ -122,6 +122,9 @@ export async function runGlassbook(
   if (!execR.ok) return fail(execR.error);
   const execution = execR.value;
   state.execution = execution;
+  // Persist the protocol packet before the adversarial evaluator runs. The
+  // finalizer writes the complete state again after evaluation/outcome.
+  await emitter.persistState(state);
 
   // 6. Evaluation
   const evalR = await runResultSection('evaluation', () =>

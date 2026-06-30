@@ -39,6 +39,36 @@ export function resolveModelId(role?: SubagentRole): string | undefined {
   return value && value.trim() ? value.trim() : undefined;
 }
 
+export const DEFAULT_MODEL_CALL_TIMEOUT_MS = 180_000;
+
+export function resolveModelTimeoutMs(): number {
+  const raw = process.env.GLASSBOOK_MODEL_TIMEOUT_MS;
+  if (!raw) return DEFAULT_MODEL_CALL_TIMEOUT_MS;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MODEL_CALL_TIMEOUT_MS;
+}
+
+async function withModelTimeout<T>(
+  fn: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number = resolveModelTimeoutMs(),
+): Promise<T> {
+  const controller = new AbortController();
+  let timeout: NodeJS.Timeout | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      reject(new Error(`model call timed out after ${timeoutMs}ms`));
+      controller.abort();
+    }, timeoutMs);
+    timeout.unref?.();
+  });
+
+  try {
+    return await Promise.race([fn(controller.signal), timeoutPromise]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 interface CommonArgs {
   /** Subagent role; selects the per-role model and tags usage. */
   role?: SubagentRole;
@@ -46,6 +76,8 @@ interface CommonArgs {
   meter?: UsageMeter;
   /** Max transient-failure retries (default from withRetry). */
   retries?: number;
+  /** Per-attempt model-call timeout in ms; default from env or 180s. */
+  modelTimeoutMs?: number;
 }
 
 /**
@@ -65,12 +97,17 @@ export async function runPlanSubagent<T>(
     const model = await getModel({ model: resolveModelId(args.role) });
     const result = await withRetry(
       () =>
-        generateText({
-          model,
-          output: Output.object({ schema: args.schema, name: args.schemaName }),
-          system: args.system,
-          prompt: args.prompt,
-        }),
+        withModelTimeout(
+          (abortSignal) =>
+            generateText({
+              model,
+              output: Output.object({ schema: args.schema, name: args.schemaName }),
+              system: args.system,
+              prompt: args.prompt,
+              abortSignal,
+            }),
+          args.modelTimeoutMs,
+        ),
       { retries: args.retries },
     );
     args.meter?.record(args.role ?? 'planner', result.usage as TokenUsageLike);
@@ -101,13 +138,18 @@ export async function runToolSubagent(
     const model = await getModel({ model: resolveModelId(args.role) });
     const result = await withRetry(
       () =>
-        generateText({
-          model,
-          system: args.system,
-          prompt: args.prompt,
-          tools: args.tools,
-          stopWhen: stepCountIs(args.maxSteps),
-        }),
+        withModelTimeout(
+          (abortSignal) =>
+            generateText({
+              model,
+              system: args.system,
+              prompt: args.prompt,
+              tools: args.tools,
+              stopWhen: stepCountIs(args.maxSteps),
+              abortSignal,
+            }),
+          args.modelTimeoutMs,
+        ),
       { retries: args.retries },
     );
     args.meter?.record(args.role ?? 'worker', result.usage as TokenUsageLike);

@@ -113,4 +113,39 @@ describe('buildPrBody', () => {
     expect(body).toContain('**Typed cells:** 1');
     expect(body).toContain('**Usage:** 2 call(s), 30 tokens');
   });
+
+  it('renders protocol packet details when execution emits a packet', () => {
+    const s = baseState();
+    s.execution = {
+      desiredStateAchieved: true,
+      evidence: 'Equivalent transformation completed.',
+      testOutput: 'PASS',
+      protocol: 'theseus',
+      packet: {
+        protocol: 'theseus',
+        packet: 'transformation',
+        objective: 'Extract parser state machine',
+        invariants: ['public parse output remains unchanged'],
+        acceptedChanges: ['internal parser state is explicit'],
+        evaluatorSuite: ['npm test'],
+        equivalent: true,
+        rollbackPlan: 'Revert the protocol branch merge commit.',
+        remainingRisks: ['performance was not benchmarked'],
+      },
+      verification: {
+        baselinePassed: true,
+        finalPassed: true,
+        commands: ['npm test'],
+      },
+    };
+
+    const body = buildPrBody(s);
+
+    expect(body).toContain('**Protocol:** theseus');
+    expect(body).toContain('**Protocol packet:** transformation');
+    expect(body).toContain('Extract parser state machine');
+    expect(body).toContain('public parse output remains unchanged');
+    expect(body).toContain('npm test');
+    expect(body).toContain('performance was not benchmarked');
+  });
 });

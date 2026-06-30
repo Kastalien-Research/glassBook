@@ -123,6 +123,11 @@ In order to improve Srcbook, we collect some behavioral analytics. We don't coll
 
 If you want to disable tracking, you can run Srcbook with `SRCBOOK_DISABLE_ANALYTICS=true` set in the environment.
 
+## MCP HTTP endpoint
+
+The `/api/mcp` HTTP endpoint is localhost-only and disabled unless `SRCBOOK_MCP_TOKEN` is set.
+Local MCP clients must send `Authorization: Bearer <SRCBOOK_MCP_TOKEN>`.
+
 ## Contributing
 
 For development instructions, see [CONTRIBUTING.md](https://github.com/srcbookdev/srcbook/blob/main/CONTRIBUTING.md).

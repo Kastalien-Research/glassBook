@@ -1,15 +1,14 @@
-import { runUlysses } from '../epiops/ulysses.mjs';
 import { sh, detectInstallCommand } from '../tools.mjs';
 import type { WorkPlan, Plan, ExecutionResult } from '../schemas.mjs';
 import type { SectionContext } from '../context.mjs';
-import { makeError, ok, err, type Result } from '../types.mjs';
+import { ok, type Result } from '../types.mjs';
+import { runCodebaseProtocol } from '../epiops/codebase-runner.mjs';
 
 /**
  * Section 5 — Work Execution.
  *
- * Dispatches to the chosen EpiOps process (v0: Ulysses). The process creates
- * cells, produces diffs, runs the gates, and loops until the desired state is
- * reached or the turn budget is exhausted.
+ * Dispatches to the chosen EpiOps process. Each codebase-family protocol owns
+ * its packet semantics while sharing the same section boundary and setup path.
  */
 export async function runWorkExecution(
   ctx: SectionContext,
@@ -32,23 +31,19 @@ export async function runWorkExecution(
     }
   }
 
-  switch (workPlan.process) {
-    case 'ulysses':
-    case 'theseus':
-    case 'hephaestus':
-    case 'ariadne': {
-      const res = await runUlysses(ctx, plan, workPlan);
-      if (!res.ok) return res;
-      await emitter.section(
-        'Work execution — Result',
-        `**Desired state achieved:** ${res.value.desiredStateAchieved ? 'yes' : 'no'}\n\n${res.value.evidence}`,
-      );
-      logger.success(`execution complete (achieved=${res.value.desiredStateAchieved})`);
-      return ok(res.value);
-    }
-    default: {
-      const _exhaustive: never = workPlan.process;
-      return err(makeError('WorkPlanError', `unknown EpiOps process: ${String(_exhaustive)}`));
-    }
-  }
+  const res = await runCodebaseProtocol({ ctx, plan, workPlan });
+  if (!res.ok) return res;
+  await emitter.section(
+    'Work execution — Result',
+    [
+      `**Protocol:** ${res.value.protocol ?? workPlan.process}`,
+      `**Desired state achieved:** ${res.value.desiredStateAchieved ? 'yes' : 'no'}`,
+      '',
+      res.value.evidence,
+    ].join('\n'),
+  );
+  logger.success(
+    `execution complete (protocol=${workPlan.process}, achieved=${res.value.desiredStateAchieved})`,
+  );
+  return ok(res.value);
 }

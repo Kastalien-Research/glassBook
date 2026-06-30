@@ -222,7 +222,7 @@ function buildPackageJson(language: CodeLanguageType) {
 }
 
 export function removeSrcbook(srcbookDir: string) {
-  fs.rm(srcbookDir, { recursive: true });
+  return fs.rm(srcbookDir, { recursive: true });
 }
 
 export function removeCodeCellFromDisk(srcbookDir: string, filename: string) {

@@ -19,6 +19,23 @@ export const hephaestusProtocol: CodebaseProtocol = {
     return consideration('hephaestus', entities);
   },
   async emit(): Promise<HephaestusPacket> {
-    return { protocol: 'hephaestus', packet: 'reproduction', reproducer: '', minimized: false };
+    return {
+      protocol: 'hephaestus',
+      packet: 'reproduction',
+      targetFailure: 'Capture and minimize the target failure while preserving the oracle.',
+      reproducer: 'failure oracle command',
+      minimalArtifacts: ['target repository snapshot'],
+      expectedBehavior: 'The intended behavior described by the plan success criteria.',
+      actualBehavior: 'The failure still reproduces under the oracle.',
+      failureOracle: 'executable failure oracle',
+      environmentRequirements: ['repository checkout', 'declared package dependencies'],
+      reducedDimensions: ['unnecessary context removed only when the oracle remains valid'],
+      irreducibleDimensions: [
+        'No live reduction evidence was provided to this static packet emitter.',
+      ],
+      hypotheses: ['The minimized case should route into a debugging workflow next.'],
+      recommendedNextWorkflow: 'Run Ulysses against the minimized reproducer.',
+      minimized: false,
+    };
   },
 };

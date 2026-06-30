@@ -38,10 +38,31 @@ export async function runEvaluation(
     `Objective: ${state.prompt}`,
     `Goal: ${plan.goal}`,
     `Working branch: ${state.workingBranch ?? '(unknown)'}`,
+    state.notebookDir
+      ? `glassBook notebook directory: ${state.notebookDir}\nglassBook sidecar: ${state.notebookDir}/glassbook.json`
+      : '',
+    execution.protocol ? `Protocol: ${execution.protocol}` : '',
     `Gate commands:\n${plan.finalGates.map((g) => `- ${g.command}`).join('\n')}`,
     `\nClaimed result: desiredStateAchieved=${execution.desiredStateAchieved}`,
+    execution.verification
+      ? `\nVerification summary:\n${JSON.stringify(execution.verification, null, 2)}`
+      : '',
+    execution.packet
+      ? `\nProtocol packet emitted by work execution:\n${JSON.stringify(execution.packet, null, 2)}`
+      : '',
+    execution.packet
+      ? [
+          '',
+          'Packet review instruction: treat this JSON as the emitted sidecar/notebook packet.',
+          'The target repository is not expected to contain glassbook.json; glassBook persists that sidecar in the notebook directory outside the target repo.',
+          'Repo-scoped tools may not be able to read that notebook directory, so do not reject solely because glassbook.json is absent from the target repository.',
+          'Do not require an additional target-repository packet file unless the user prompt or gate commands explicitly require one.',
+        ].join('\n')
+      : '',
     `\nReported test output:\n${execution.testOutput}`,
-  ].join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   const review = await runToolSubagent({
     system: reviewSystem,
@@ -62,7 +83,18 @@ export async function runEvaluation(
     schemaName: 'EvaluationVerdict',
     system:
       'Based on the adversarial review, produce the final verdict. Approve ONLY if the objective is genuinely satisfied and the gates truly pass without gaming. If anything looks gamed, set rewardHackingDetected=true and verdict="reject".',
-    prompt: `Objective: ${state.prompt}\n\nAdversarial review:\n${reviewText}\n\nClaimed test output:\n${execution.testOutput}`,
+    prompt: [
+      `Objective: ${state.prompt}`,
+      execution.protocol ? `Protocol: ${execution.protocol}` : '',
+      execution.packet ? `Protocol packet:\n${JSON.stringify(execution.packet, null, 2)}` : '',
+      execution.packet
+        ? 'Sidecar instruction: the protocol packet above is the glassBook runtime packet persisted to the notebook-sidecar glassbook.json, not a target-repository file.'
+        : '',
+      `Adversarial review:\n${reviewText}`,
+      `Claimed test output:\n${execution.testOutput}`,
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
     role: 'reviewer',
     meter: ctx.meter,
   });

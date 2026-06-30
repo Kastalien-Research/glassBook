@@ -35,6 +35,11 @@ import { readdir } from '../fs-utils.mjs';
 import { EXAMPLE_SRCBOOKS } from '../srcbook/examples.mjs';
 import { pathToSrcbook } from '../srcbook/path.mjs';
 import { isSrcmdPath } from '../srcmd/paths.mjs';
+import { mcpServer, activeHttpTransports } from '../mcp/server.mjs';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { randomUUID } from 'node:crypto';
+import { requireMcpBearerToken } from './mcp-auth.mjs';
+import { requireLocalMcpRequest } from './mcp-local-only.mjs';
 
 const app: Application = express();
 
@@ -106,7 +111,7 @@ router.options('/srcbooks/:id', cors());
 router.delete('/srcbooks/:id', cors(), async (req, res) => {
   const { id } = req.params;
   const srcbookDir = pathToSrcbook(id);
-  removeSrcbook(srcbookDir);
+  await removeSrcbook(srcbookDir);
   posthog.capture({ event: 'user deleted srcbook' });
   await deleteSessionByDirname(srcbookDir);
   return res.json({ error: false, deleted: true });
@@ -391,6 +396,26 @@ router.post('/subscribe', cors(), async (req, res) => {
   } else {
     return res.status(hubResponse.status).json({ success: false });
   }
+});
+
+// Streamable HTTP Model Context Protocol (MCP) server endpoint
+router.options('/mcp', requireLocalMcpRequest, requireMcpBearerToken, cors());
+router.all('/mcp', requireLocalMcpRequest, requireMcpBearerToken, cors(), async (req, res) => {
+  const sessionId = req.headers['mcp-session-id'] as string | undefined;
+
+  let transport = sessionId ? activeHttpTransports.get(sessionId) : undefined;
+  if (!transport) {
+    transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+      onsessioninitialized: (id) => {
+        console.log(`[MCP Server] Session initialized: ${id}`);
+        activeHttpTransports.set(id, transport!);
+      },
+    });
+    await mcpServer.connect(transport);
+  }
+
+  await transport.handleRequest(req, res, req.body);
 });
 
 app.use('/api', router);

@@ -1,4 +1,4 @@
-import { generateText } from 'ai';
+import { generateText, jsonSchema } from 'ai';
 import { getModel } from './config.mjs';
 import {
   type CodeLanguageType,
@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import Path from 'node:path';
 import { PROMPTS_DIR } from '../constants.mjs';
 import { encode, decodeCells } from '../srcmd.mjs';
+import { mcpClientManager } from '../mcp/client.mjs';
 
 const makeGenerateSrcbookSystemPrompt = () => {
   return readFileSync(Path.join(PROMPTS_DIR, 'srcbook-generator.txt'), 'utf-8');
@@ -147,6 +148,12 @@ type GenerateCellsResult = {
   errors?: string[];
   cells?: CellType[];
 };
+
+function latestGeneratedText(result: { text?: string; steps?: Array<{ text?: string }> }) {
+  const candidates = [result.text, ...(result.steps ?? []).map((step) => step.text).reverse()];
+  return candidates.find((text) => text && text.trim().length > 0) ?? '';
+}
+
 export async function generateCells(
   query: string,
   session: SessionType,
@@ -154,28 +161,68 @@ export async function generateCells(
 ): Promise<GenerateCellsResult> {
   const model = await getModel();
 
-  const systemPrompt = makeGenerateCellSystemPrompt(session.language);
-  const userPrompt = makeGenerateCellUserPrompt(session, insertIdx, query);
-  const result = await generateText({
-    model,
-    system: systemPrompt,
-    prompt: userPrompt,
-  });
+  try {
+    // Load and connect all configured external MCP servers
+    await mcpClientManager.connectAll();
+    const mcpTools = await mcpClientManager.listAllTools();
 
-  // TODO, handle 'length' finish reason with sequencing logic.
-  if (result.finishReason !== 'stop') {
-    console.warn('Generated a cell, but finish_reason was not "stop":', result.finishReason);
-  }
+    const aiTools: Record<string, any> = {};
+    for (const t of mcpTools) {
+      const aiToolName = `mcp__${t.serverName}__${t.name}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+      aiTools[aiToolName] = {
+        description: t.description || `MCP Tool "${t.name}" from server "${t.serverName}"`,
+        parameters: jsonSchema(t.inputSchema),
+        execute: async (args: any) => {
+          const mcpResult = await mcpClientManager.callTool(t.serverName, t.name, args);
+          return typeof mcpResult === 'string' ? mcpResult : JSON.stringify(mcpResult);
+        },
+      };
+    }
 
-  // Parse the result into cells
-  // TODO: figure out logging.
-  // Data is incredibly valuable for product improvements, but privacy needs to be considered.
-  const decodeResult = decodeCells(result.text);
+    const systemPrompt = makeGenerateCellSystemPrompt(session.language);
+    const userPrompt = makeGenerateCellUserPrompt(session, insertIdx, query);
 
-  if (decodeResult.error) {
-    return { error: true, errors: decodeResult.errors };
-  } else {
-    return { error: false, cells: decodeResult.srcbook.cells };
+    const generateOptions: any = {
+      model,
+      system: systemPrompt,
+      prompt: userPrompt,
+    };
+
+    if (Object.keys(aiTools).length > 0) {
+      generateOptions.tools = aiTools;
+      generateOptions.maxSteps = 5; // Allow multi-step tool-calling loops
+    }
+
+    const result = await generateText(generateOptions);
+
+    // TODO, handle 'length' finish reason with sequencing logic.
+    if (result.finishReason !== 'stop' && result.finishReason !== 'tool-calls') {
+      console.warn(
+        'Generated a cell, but finish_reason was not "stop" or "tool-calls":',
+        result.finishReason,
+      );
+    }
+
+    const generatedText = latestGeneratedText(result);
+    if (generatedText.trim().length === 0) {
+      return {
+        error: true,
+        errors: [`Model finished with ${result.finishReason} without returning generated cells`],
+      };
+    }
+
+    // Parse the result into cells
+    // TODO: figure out logging.
+    // Data is incredibly valuable for product improvements, but privacy needs to be considered.
+    const decodeResult = decodeCells(generatedText);
+
+    if (decodeResult.error) {
+      return { error: true, errors: decodeResult.errors };
+    } else {
+      return { error: false, cells: decodeResult.srcbook.cells };
+    }
+  } finally {
+    await mcpClientManager.shutdownAll();
   }
 }
 
