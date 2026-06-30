@@ -128,6 +128,9 @@ The conceptual core is implemented; several spec details from `workflows/ulysses
 - ✅ Config precedence is explicit: direct call options such as `getModel({ model })`
   win first, then environment variables, then SQLite config (`~/.srcbook/srcbook.db`),
   then provider defaults.
+- ✅ Model calls are bounded per attempt by `GLASSBOOK_MODEL_TIMEOUT_MS` (default: 180000ms)
+  so stalled provider requests surface as typed `SubagentError` failures instead of hanging
+  the CLI indefinitely.
 
 ### 2.10 Tooling / security
 

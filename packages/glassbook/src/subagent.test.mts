@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 
 const objectOutput = { name: 'object-output' };
@@ -22,6 +22,7 @@ vi.mock('@srcbook/api/headless', () => ({
 
 describe('runPlanSubagent', () => {
   beforeEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
     object.mockReturnValue(objectOutput);
     getModel.mockResolvedValue(model);
@@ -30,6 +31,10 @@ describe('runPlanSubagent', () => {
       usage: { inputTokens: 2, outputTokens: 3, totalTokens: 5 },
     });
     generateObject.mockRejectedValue(new Error('generateObject should not be called'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('uses generateText with an object output spec', async () => {
@@ -52,7 +57,37 @@ describe('runPlanSubagent', () => {
       output: objectOutput,
       system: 'system prompt',
       prompt: 'user prompt',
+      abortSignal: expect.any(AbortSignal),
     });
     expect(generateObject).not.toHaveBeenCalled();
+  });
+
+  it('turns a hung model call into a typed subagent timeout failure', async () => {
+    vi.useFakeTimers();
+    const { runToolSubagent } = await import('./subagent.mjs');
+    generateText.mockImplementation(
+      ({ abortSignal }: { abortSignal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          abortSignal.addEventListener('abort', () => reject(new Error('aborted by timeout')));
+        }),
+    );
+
+    const resultPromise = runToolSubagent({
+      system: 'system prompt',
+      prompt: 'user prompt',
+      tools: {},
+      maxSteps: 1,
+      retries: 0,
+      modelTimeoutMs: 5,
+    });
+    await vi.advanceTimersByTimeAsync(5);
+
+    const result = await resultPromise;
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error._tag).toBe('SubagentError');
+      expect(result.error.message).toContain('timed out after 5ms');
+    }
   });
 });
