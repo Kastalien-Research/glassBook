@@ -144,9 +144,7 @@ describe('runEvaluation', () => {
     );
     expect(mocks.runPlanSubagent).toHaveBeenCalledWith(
       expect.objectContaining({
-        prompt: expect.stringContaining(
-          'not a target-repository file',
-        ),
+        prompt: expect.stringContaining('not a target-repository file'),
       }),
     );
   });

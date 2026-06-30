@@ -52,5 +52,9 @@ export { getConfig, updateConfig, getSecretsAssociatedWithSession } from './conf
 // constants
 export { SRCBOOK_DIR, SRCBOOKS_DIR } from './constants.mjs';
 
+// MCP Server & Client
+export { mcpServer, activeHttpTransports } from './mcp/server.mjs';
+export { mcpClientManager, McpClientManager } from './mcp/client.mjs';
+
 // types
 export type { SessionType } from './types.mjs';

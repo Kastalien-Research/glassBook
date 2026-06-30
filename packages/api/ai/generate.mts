@@ -1,4 +1,4 @@
-import { generateText } from 'ai';
+import { generateText, jsonSchema } from 'ai';
 import { getModel } from './config.mjs';
 import {
   type CodeLanguageType,
@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import Path from 'node:path';
 import { PROMPTS_DIR } from '../constants.mjs';
 import { encode, decodeCells } from '../srcmd.mjs';
+import { mcpClientManager } from '../mcp/client.mjs';
 
 const makeGenerateSrcbookSystemPrompt = () => {
   return readFileSync(Path.join(PROMPTS_DIR, 'srcbook-generator.txt'), 'utf-8');
@@ -154,17 +155,45 @@ export async function generateCells(
 ): Promise<GenerateCellsResult> {
   const model = await getModel();
 
+  // Load and connect all configured external MCP servers
+  await mcpClientManager.connectAll();
+  const mcpTools = await mcpClientManager.listAllTools();
+
+  const aiTools: Record<string, any> = {};
+  for (const t of mcpTools) {
+    const aiToolName = `mcp__${t.serverName}__${t.name}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+    aiTools[aiToolName] = {
+      description: t.description || `MCP Tool "${t.name}" from server "${t.serverName}"`,
+      parameters: jsonSchema(t.inputSchema),
+      execute: async (args: any) => {
+        const mcpResult = await mcpClientManager.callTool(t.serverName, t.name, args);
+        return typeof mcpResult === 'string' ? mcpResult : JSON.stringify(mcpResult);
+      },
+    };
+  }
+
   const systemPrompt = makeGenerateCellSystemPrompt(session.language);
   const userPrompt = makeGenerateCellUserPrompt(session, insertIdx, query);
-  const result = await generateText({
+
+  const generateOptions: any = {
     model,
     system: systemPrompt,
     prompt: userPrompt,
-  });
+  };
+
+  if (Object.keys(aiTools).length > 0) {
+    generateOptions.tools = aiTools;
+    generateOptions.maxSteps = 5; // Allow multi-step tool-calling loops
+  }
+
+  const result = await generateText(generateOptions);
 
   // TODO, handle 'length' finish reason with sequencing logic.
-  if (result.finishReason !== 'stop') {
-    console.warn('Generated a cell, but finish_reason was not "stop":', result.finishReason);
+  if (result.finishReason !== 'stop' && result.finishReason !== 'tool-calls') {
+    console.warn(
+      'Generated a cell, but finish_reason was not "stop" or "tool-calls":',
+      result.finishReason,
+    );
   }
 
   // Parse the result into cells

@@ -37,6 +37,7 @@
     "@ai-sdk/google": "catalog:",
     "@ai-sdk/openai": "catalog:",
     "@ai-sdk/provider": "catalog:",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@srcbook/shared": "workspace:^",
     "ai": "catalog:",
     "better-sqlite3": "^11.3.0",
