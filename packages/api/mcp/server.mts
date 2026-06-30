@@ -1,21 +1,21 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { randomUUID } from 'node:crypto';
-import Path from 'node:path';
 import fs from 'node:fs/promises';
 import z from 'zod';
 import {
+  createSession,
+  deleteSessionByDirname,
   findSession,
   listSessions,
   addCell,
   updateCell,
-  removeCell,
   sessionToResponse,
 } from '../session.mjs';
 import { createSrcbook, removeSrcbook } from '../srcbook/index.mjs';
 import { node, tsx } from '../exec.mjs';
 import { pathToCodeFile, pathToReadme } from '../srcbook/path.mjs';
-import { type CodeLanguageType, type CodeCellType } from '@srcbook/shared';
+import { type CodeLanguageType, type CodeCellType, type MarkdownCellType } from '@srcbook/shared';
 
 // Create the global MCP Server instance
 export const mcpServer = new McpServer({
@@ -67,7 +67,8 @@ mcpServer.registerTool(
   async ({ name, language }) => {
     try {
       const srcbookDir = await createSrcbook(name, language as CodeLanguageType);
-      const id = Path.basename(srcbookDir);
+      const session = await createSession(srcbookDir);
+      const id = session.id;
       return {
         content: [
           {
@@ -132,19 +133,25 @@ mcpServer.registerTool(
       const session = await findSession(id);
       const cellId = randomUUID().slice(0, 10);
 
-      const cell: any = {
-        id: cellId,
-        type,
-        source,
-      };
-
-      if (type === 'code') {
+      let cell: MarkdownCellType | CodeCellType;
+      if (type === 'markdown') {
+        cell = {
+          id: cellId,
+          type,
+          text: source,
+        };
+      } else {
         if (!filename) {
           throw new Error('Filename is required for code cells.');
         }
-        cell.filename = filename;
-        cell.language = session.language;
-        cell.status = 'idle';
+        cell = {
+          id: cellId,
+          type,
+          source,
+          filename,
+          language: session.language,
+          status: 'idle',
+        };
       }
 
       await addCell(session, cell, index);
@@ -181,7 +188,9 @@ mcpServer.registerTool(
         throw new Error(`Cell ${cellId} not found in session ${id}.`);
       }
 
-      const result = await updateCell(session, cell, { source });
+      const updates =
+        cell.type === 'markdown' || cell.type === 'title' ? { text: source } : { source };
+      const result = await updateCell(session, cell, updates);
       if (!result.success) {
         return {
           content: [
@@ -282,8 +291,8 @@ mcpServer.registerTool(
   async ({ id }) => {
     try {
       const session = await findSession(id);
-      removeSrcbook(session.dir);
-      await removeCell(session, id);
+      await removeSrcbook(session.dir);
+      await deleteSessionByDirname(session.dir);
       return {
         content: [{ type: 'text', text: JSON.stringify({ success: true, deleted: id }, null, 2) }],
       };
@@ -312,12 +321,12 @@ mcpServer.registerTool(
     }),
   },
   async ({ language, code }) => {
+    let srcbookDir: string | undefined;
     try {
       // Create a temporary scratchpad srcbook to run this code securely
       const name = `scratchpad-${randomUUID().slice(0, 8)}`;
-      const srcbookDir = await createSrcbook(name, language as CodeLanguageType);
-      const id = Path.basename(srcbookDir);
-      const session = await findSession(id);
+      srcbookDir = await createSrcbook(name, language as CodeLanguageType);
+      const session = await createSession(srcbookDir);
 
       const filename = language === 'typescript' ? 'index.ts' : 'index.js';
       const cellId = randomUUID().slice(0, 10);
@@ -360,9 +369,6 @@ mcpServer.registerTool(
         });
       });
 
-      // Cleanup scratchpad
-      removeSrcbook(srcbookDir);
-
       return {
         content: [
           {
@@ -376,6 +382,11 @@ mcpServer.registerTool(
         content: [{ type: 'text', text: `Failed to execute code: ${error?.message || error}` }],
         isError: true,
       };
+    } finally {
+      if (srcbookDir) {
+        await deleteSessionByDirname(srcbookDir);
+        await removeSrcbook(srcbookDir);
+      }
     }
   },
 );

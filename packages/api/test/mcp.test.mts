@@ -2,10 +2,142 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Path from 'node:path';
 import fs from 'node:fs/promises';
 import os from 'node:os';
+
+const mocks = vi.hoisted(() => {
+  const basename = (dir: string) => dir.split('/').filter(Boolean).pop() ?? dir;
+  const sessions = new Map<string, any>();
+  let counter = 0;
+
+  const makeSession = (dir: string, language: 'typescript' | 'javascript' = 'typescript') => {
+    const id = basename(dir);
+    const session = {
+      id,
+      dir,
+      language,
+      openedAt: Date.now(),
+      cells: [
+        { id: 'title', type: 'title', text: id },
+        {
+          id: 'package',
+          type: 'package.json',
+          source: '{}',
+          filename: 'package.json',
+          status: 'idle',
+        },
+      ],
+    };
+    sessions.set(id, session);
+    return session;
+  };
+
+  return {
+    sessions,
+    createSrcbook: vi.fn(async (name: string, _language: 'typescript' | 'javascript') => {
+      counter += 1;
+      const slug = name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+      return `/tmp/srcbooks/${slug || 'srcbook'}-${counter}`;
+    }),
+    removeSrcbook: vi.fn(async () => undefined),
+    createSession: vi.fn(async (dir: string) => makeSession(dir)),
+    deleteSessionByDirname: vi.fn(async (dir: string) => {
+      for (const [id, session] of sessions) {
+        if (session.dir === dir) {
+          sessions.delete(id);
+        }
+      }
+    }),
+    findSession: vi.fn(async (id: string) => {
+      const session = sessions.get(id);
+      if (!session) {
+        throw new Error(`Session with id ${id} not found`);
+      }
+      return session;
+    }),
+    listSessions: vi.fn(async () => Object.fromEntries(sessions)),
+    addCell: vi.fn(async (session: any, cell: any, index: number) => {
+      if (cell.type === 'markdown' && typeof cell.text !== 'string') {
+        throw new Error('Markdown cells must store content in text');
+      }
+      session.cells.splice(index, 0, cell);
+    }),
+    updateCell: vi.fn(async (_session: any, cell: any, updates: any) => {
+      if (cell.type === 'markdown' && typeof updates.text !== 'string') {
+        return {
+          success: false,
+          errors: [{ message: 'Markdown updates must store content in text' }],
+        };
+      }
+      Object.assign(cell, updates);
+      return { success: true, cell };
+    }),
+    removeCell: vi.fn((session: any, id: string) =>
+      session.cells.filter((cell: any) => cell.id !== id),
+    ),
+    sessionToResponse: vi.fn((session: any) => ({
+      id: session.id,
+      cells: session.cells,
+      language: session.language,
+      openedAt: session.openedAt,
+    })),
+    execNode: vi.fn(({ stdout, onExit }: any) => {
+      stdout(Buffer.from('ok\n'));
+      onExit(0);
+    }),
+    execTsx: vi.fn(({ stdout, onExit }: any) => {
+      stdout(Buffer.from('ok\n'));
+      onExit(0);
+    }),
+    reset: () => {
+      counter = 0;
+      sessions.clear();
+    },
+    seedSession: (id: string, language: 'typescript' | 'javascript' = 'typescript') =>
+      makeSession(`/tmp/srcbooks/${id}`, language),
+  };
+});
+
+vi.mock('../session.mjs', () => ({
+  createSession: mocks.createSession,
+  findSession: mocks.findSession,
+  listSessions: mocks.listSessions,
+  addCell: mocks.addCell,
+  updateCell: mocks.updateCell,
+  removeCell: mocks.removeCell,
+  deleteSessionByDirname: mocks.deleteSessionByDirname,
+  sessionToResponse: mocks.sessionToResponse,
+}));
+
+vi.mock('../srcbook/index.mjs', () => ({
+  createSrcbook: mocks.createSrcbook,
+  removeSrcbook: mocks.removeSrcbook,
+}));
+
+vi.mock('../exec.mjs', () => ({
+  node: mocks.execNode,
+  tsx: mocks.execTsx,
+}));
+
 import { mcpServer } from '../mcp/server.mjs';
 import { mcpClientManager } from '../mcp/client.mjs';
 
+async function callTool(name: string, args: any) {
+  return (mcpServer as any)._registeredTools[name].handler(args, {});
+}
+
+function parseToolJson(result: any) {
+  expect(result.isError).not.toBe(true);
+  return JSON.parse(result.content[0].text);
+}
+
 describe('MCP Server', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.reset();
+  });
+
   it('instantiates an McpServer instance', () => {
     expect(mcpServer).toBeDefined();
     expect(mcpServer.server).toBeDefined();
@@ -33,6 +165,76 @@ describe('MCP Server', () => {
   it('registers solve-problem prompt', async () => {
     const promptNames = Object.keys((mcpServer as any)._registeredPrompts);
     expect(promptNames).toContain('solve-problem');
+  });
+
+  it('registers newly created srcbooks before returning their IDs', async () => {
+    const created = parseToolJson(
+      await callTool('create-srcbook', { name: 'Review Notebook', language: 'typescript' }),
+    );
+
+    expect(mocks.createSession).toHaveBeenCalledWith(created.path);
+
+    const retrieved = parseToolJson(await callTool('get-srcbook', { id: created.id }));
+    expect(retrieved).toMatchObject({ id: created.id, language: 'typescript' });
+  });
+
+  it('creates a scratchpad session before executing code', async () => {
+    const result = parseToolJson(
+      await callTool('execute-code', { language: 'typescript', code: 'console.log("ok")' }),
+    );
+
+    expect(mocks.createSession).toHaveBeenCalledWith(
+      expect.stringContaining('/tmp/srcbooks/scratchpad-'),
+    );
+    expect(mocks.addCell).toHaveBeenCalledWith(
+      expect.objectContaining({ id: expect.stringContaining('scratchpad-') }),
+      expect.objectContaining({ type: 'code', source: 'console.log("ok")' }),
+      1,
+    );
+    expect(result).toMatchObject({ exitCode: 0, stdout: 'ok\n' });
+  });
+
+  it('stores added markdown cell content in text', async () => {
+    mocks.seedSession('markdown-session');
+
+    const result = parseToolJson(
+      await callTool('add-cell', {
+        id: 'markdown-session',
+        type: 'markdown',
+        source: 'Rendered markdown',
+        index: 1,
+      }),
+    );
+
+    expect(result.cell).toMatchObject({ type: 'markdown', text: 'Rendered markdown' });
+    expect(result.cell).not.toHaveProperty('source');
+  });
+
+  it('updates markdown cell content through text', async () => {
+    const session = mocks.seedSession('update-markdown');
+    session.cells.push({ id: 'md', type: 'markdown', text: 'old text' });
+
+    const result = parseToolJson(
+      await callTool('update-cell', {
+        id: 'update-markdown',
+        cellId: 'md',
+        source: 'new text',
+      }),
+    );
+
+    expect(result.cell).toMatchObject({ id: 'md', type: 'markdown', text: 'new text' });
+  });
+
+  it('unregisters deleted srcbook sessions after removing their directory', async () => {
+    mocks.seedSession('delete-me');
+
+    parseToolJson(await callTool('delete-srcbook', { id: 'delete-me' }));
+
+    expect(mocks.removeSrcbook).toHaveBeenCalledWith('/tmp/srcbooks/delete-me');
+    expect(mocks.deleteSessionByDirname).toHaveBeenCalledWith('/tmp/srcbooks/delete-me');
+    await expect(mocks.findSession('delete-me')).rejects.toThrow(
+      'Session with id delete-me not found',
+    );
   });
 });
 

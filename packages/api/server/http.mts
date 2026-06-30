@@ -38,6 +38,7 @@ import { isSrcmdPath } from '../srcmd/paths.mjs';
 import { mcpServer, activeHttpTransports } from '../mcp/server.mjs';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { randomUUID } from 'node:crypto';
+import { requireLocalMcpRequest } from './mcp-local-only.mjs';
 
 const app: Application = express();
 
@@ -109,7 +110,7 @@ router.options('/srcbooks/:id', cors());
 router.delete('/srcbooks/:id', cors(), async (req, res) => {
   const { id } = req.params;
   const srcbookDir = pathToSrcbook(id);
-  removeSrcbook(srcbookDir);
+  await removeSrcbook(srcbookDir);
   posthog.capture({ event: 'user deleted srcbook' });
   await deleteSessionByDirname(srcbookDir);
   return res.json({ error: false, deleted: true });
@@ -397,8 +398,8 @@ router.post('/subscribe', cors(), async (req, res) => {
 });
 
 // Streamable HTTP Model Context Protocol (MCP) server endpoint
-router.options('/mcp', cors());
-router.all('/mcp', cors(), async (req, res) => {
+router.options('/mcp', requireLocalMcpRequest, cors());
+router.all('/mcp', requireLocalMcpRequest, cors(), async (req, res) => {
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
   let transport = sessionId ? activeHttpTransports.get(sessionId) : undefined;

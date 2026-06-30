@@ -148,6 +148,12 @@ type GenerateCellsResult = {
   errors?: string[];
   cells?: CellType[];
 };
+
+function latestGeneratedText(result: { text?: string; steps?: Array<{ text?: string }> }) {
+  const candidates = [result.text, ...(result.steps ?? []).map((step) => step.text).reverse()];
+  return candidates.find((text) => text && text.trim().length > 0) ?? '';
+}
+
 export async function generateCells(
   query: string,
   session: SessionType,
@@ -155,56 +161,68 @@ export async function generateCells(
 ): Promise<GenerateCellsResult> {
   const model = await getModel();
 
-  // Load and connect all configured external MCP servers
-  await mcpClientManager.connectAll();
-  const mcpTools = await mcpClientManager.listAllTools();
+  try {
+    // Load and connect all configured external MCP servers
+    await mcpClientManager.connectAll();
+    const mcpTools = await mcpClientManager.listAllTools();
 
-  const aiTools: Record<string, any> = {};
-  for (const t of mcpTools) {
-    const aiToolName = `mcp__${t.serverName}__${t.name}`.replace(/[^a-zA-Z0-9_-]/g, '_');
-    aiTools[aiToolName] = {
-      description: t.description || `MCP Tool "${t.name}" from server "${t.serverName}"`,
-      parameters: jsonSchema(t.inputSchema),
-      execute: async (args: any) => {
-        const mcpResult = await mcpClientManager.callTool(t.serverName, t.name, args);
-        return typeof mcpResult === 'string' ? mcpResult : JSON.stringify(mcpResult);
-      },
+    const aiTools: Record<string, any> = {};
+    for (const t of mcpTools) {
+      const aiToolName = `mcp__${t.serverName}__${t.name}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+      aiTools[aiToolName] = {
+        description: t.description || `MCP Tool "${t.name}" from server "${t.serverName}"`,
+        parameters: jsonSchema(t.inputSchema),
+        execute: async (args: any) => {
+          const mcpResult = await mcpClientManager.callTool(t.serverName, t.name, args);
+          return typeof mcpResult === 'string' ? mcpResult : JSON.stringify(mcpResult);
+        },
+      };
+    }
+
+    const systemPrompt = makeGenerateCellSystemPrompt(session.language);
+    const userPrompt = makeGenerateCellUserPrompt(session, insertIdx, query);
+
+    const generateOptions: any = {
+      model,
+      system: systemPrompt,
+      prompt: userPrompt,
     };
-  }
 
-  const systemPrompt = makeGenerateCellSystemPrompt(session.language);
-  const userPrompt = makeGenerateCellUserPrompt(session, insertIdx, query);
+    if (Object.keys(aiTools).length > 0) {
+      generateOptions.tools = aiTools;
+      generateOptions.maxSteps = 5; // Allow multi-step tool-calling loops
+    }
 
-  const generateOptions: any = {
-    model,
-    system: systemPrompt,
-    prompt: userPrompt,
-  };
+    const result = await generateText(generateOptions);
 
-  if (Object.keys(aiTools).length > 0) {
-    generateOptions.tools = aiTools;
-    generateOptions.maxSteps = 5; // Allow multi-step tool-calling loops
-  }
+    // TODO, handle 'length' finish reason with sequencing logic.
+    if (result.finishReason !== 'stop' && result.finishReason !== 'tool-calls') {
+      console.warn(
+        'Generated a cell, but finish_reason was not "stop" or "tool-calls":',
+        result.finishReason,
+      );
+    }
 
-  const result = await generateText(generateOptions);
+    const generatedText = latestGeneratedText(result);
+    if (generatedText.trim().length === 0) {
+      return {
+        error: true,
+        errors: [`Model finished with ${result.finishReason} without returning generated cells`],
+      };
+    }
 
-  // TODO, handle 'length' finish reason with sequencing logic.
-  if (result.finishReason !== 'stop' && result.finishReason !== 'tool-calls') {
-    console.warn(
-      'Generated a cell, but finish_reason was not "stop" or "tool-calls":',
-      result.finishReason,
-    );
-  }
+    // Parse the result into cells
+    // TODO: figure out logging.
+    // Data is incredibly valuable for product improvements, but privacy needs to be considered.
+    const decodeResult = decodeCells(generatedText);
 
-  // Parse the result into cells
-  // TODO: figure out logging.
-  // Data is incredibly valuable for product improvements, but privacy needs to be considered.
-  const decodeResult = decodeCells(result.text);
-
-  if (decodeResult.error) {
-    return { error: true, errors: decodeResult.errors };
-  } else {
-    return { error: false, cells: decodeResult.srcbook.cells };
+    if (decodeResult.error) {
+      return { error: true, errors: decodeResult.errors };
+    } else {
+      return { error: false, cells: decodeResult.srcbook.cells };
+    }
+  } finally {
+    await mcpClientManager.shutdownAll();
   }
 }
 
