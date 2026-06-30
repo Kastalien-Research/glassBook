@@ -97,7 +97,12 @@ export async function runCodebaseProtocol({
   if (final) {
     await ctx.emitter.evidence(adapter.finalGateLabel, 'text', final.output);
   }
-  if (adapter.mutatesRepo && final?.passed) {
+  const achieved = adapter.desiredStateAchieved({
+    evidence: agent.value.text,
+    baseline,
+    final,
+  });
+  if (adapter.mutatesRepo && achieved) {
     const clean = await isClean(ctx.repoDir);
     if (!clean.ok) return clean;
     if (!clean.value) {
@@ -118,11 +123,6 @@ export async function runCodebaseProtocol({
     baseline,
     final,
   });
-  const achieved = adapter.desiredStateAchieved({
-    evidence: agent.value.text,
-    baseline,
-    final,
-  });
   const output = final?.output ?? agent.value.text;
   const execution: ExecutionResult = {
     desiredStateAchieved: achieved,
@@ -132,7 +132,7 @@ export async function runCodebaseProtocol({
     packet,
     verification: {
       baselinePassed: baseline?.passed,
-      finalPassed: final?.passed ?? achieved,
+      finalPassed: achieved,
       commands: plan.finalGates.map((gate) => gate.command),
     },
   };
@@ -296,10 +296,15 @@ const hephaestusAdapter: CodebaseProtocolAdapter = {
     irreducibleDimensions: [workPlan.backupHypothesis],
     hypotheses: remainingRisks(plan),
     recommendedNextWorkflow: 'Run Ulysses against this minimized reproducer to fix the root cause.',
-    minimized: final?.passed ?? false,
+    minimized: hephaestusFailureOraclePreserved(final),
   }),
-  desiredStateAchieved: ({ final }) => final?.passed ?? false,
+  desiredStateAchieved: ({ baseline, final }) =>
+    hephaestusFailureOraclePreserved(baseline) && hephaestusFailureOraclePreserved(final),
 };
+
+function hephaestusFailureOraclePreserved(outcome: GateOutcome | undefined): boolean {
+  return outcome?.passed === false;
+}
 
 const ariadneAdapter: CodebaseProtocolAdapter = {
   id: 'ariadne',

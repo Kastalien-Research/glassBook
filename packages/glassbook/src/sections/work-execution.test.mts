@@ -176,6 +176,12 @@ describe('runWorkExecution', () => {
   });
 
   it('commits verified Hephaestus reproducer reductions before evaluation can inspect them', async () => {
+    mocks.sh.mockResolvedValue({
+      code: 1,
+      stdout: '',
+      stderr: '',
+      combined: 'failure still reproduces',
+    });
     mocks.isClean.mockResolvedValue({ ok: true, value: false });
 
     const result = await runWorkExecution(
@@ -191,6 +197,26 @@ describe('runWorkExecution', () => {
     );
   });
 
+  it('does not mark Hephaestus achieved when the failure oracle unexpectedly passes', async () => {
+    mocks.isClean.mockResolvedValue({ ok: true, value: false });
+
+    const result = await runWorkExecution(
+      makeContext('hephaestus'),
+      plan,
+      makeWorkPlan('hephaestus'),
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.desiredStateAchieved).toBe(false);
+      expect(result.value.packet).toMatchObject({
+        protocol: 'hephaestus',
+        minimized: false,
+      });
+    }
+    expect(mocks.commitAll).not.toHaveBeenCalled();
+  });
+
   it('does not commit after read-only Ariadne topology discovery', async () => {
     mocks.isClean.mockResolvedValue({ ok: true, value: false });
 
@@ -201,6 +227,13 @@ describe('runWorkExecution', () => {
   });
 
   it('emits a Hephaestus reproduction packet with a failure oracle', async () => {
+    mocks.sh.mockResolvedValue({
+      code: 1,
+      stdout: '',
+      stderr: '',
+      combined: 'failure still reproduces',
+    });
+
     const result = await runWorkExecution(
       makeContext('hephaestus'),
       plan,
@@ -209,6 +242,8 @@ describe('runWorkExecution', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
+      expect(result.value.desiredStateAchieved).toBe(true);
+      expect(result.value.verification.finalPassed).toBe(true);
       expect(result.value.packet).toMatchObject({
         protocol: 'hephaestus',
         packet: 'reproduction',
