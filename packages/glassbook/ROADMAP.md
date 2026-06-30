@@ -10,7 +10,7 @@ EpiOps library in `workflows/epiops_protocols/`.
 
 ---
 
-## Progress log (branch `feat/glassbook-green`)
+## Progress log (branch `feat/glassbook-green`; follow-up `feat/complete-codebase-protocols`)
 
 Restore point: `feat/glassbook-v0 @ e054499` (validated v0). All work below is on
 `feat/glassbook-green`, each phase committed only on green (tests + typecheck + lint).
@@ -22,15 +22,21 @@ Restore point: `feat/glassbook-v0 @ e054499` (validated v0). All work below is o
   `MAX_STEPS`. (`beeef60`)
 - ✅ **Phase 3 — Smarter sections.** Initialize discovers real gate commands
   (read-only tools); Research fans out into per-question cells. (`af63732`)
-- 🟡 **Phase 4 — EpiOps kernel.** Foundation built + fully unit-tested (state
+- ✅ **Phase 4 — EpiOps kernel.** Foundation built + fully unit-tested (state
   machine, `ForbiddenStore`, behavior signatures, `runGamespace` loop,
-  `ProtocolDefinition` contract). (`0090999`) **Next:** re-express Ulysses as a
-  `ProtocolDefinition` on the kernel, then per-behavior evaluators (§2.3).
-- ⏳ Phases 0, 5–9 pending. Phase 0 cross-package papercuts (dev-server `.env`,
-  srcbook quiet mode) deferred as they touch the web/api server and need manual
-  validation.
+  `ProtocolDefinition` contract), then wired into the live Ulysses path.
+- ✅ **Phase 5 — Executable + replay.** Gate code cells execute through the
+  notebook runtime; replay commands consume `glassbook.json`.
+- 🟡 **Phase 6 — Protocol library integration.** `workPlan` selects the
+  codebase-family protocols and `workExecution` now dispatches Ulysses,
+  Theseus, Hephaestus, and Ariadne through protocol-specific execution paths
+  that emit run packets. Unit/package checks are green; current live proof is
+  incomplete for the latest code because available provider credentials are
+  rejected.
+- ✅ **Phases 0, 7, 8, 9.** Papercuts, git robustness, sandbox/security, and the
+  Effect boundary are tracked in `UNFINISHED.md` with verification notes.
 
-Test suite: **50 unit tests**, all green; monorepo `check-types` green.
+Current unit suite: **102 unit tests**, all green; package `check-types` green.
 
 ## Sequencing philosophy
 
@@ -170,6 +176,11 @@ workPlan really chooses a process; the codebase-family protocols become runnable
 - _(Out of scope this phase: Hermes/Minos/Cassandra/Janus non-codebase worlds.)_
 
 **Exit:** `workPlan` selects among ≥4 real protocols; each runs end-to-end and emits its packet.
+
+**Implementation note:** `packages/glassbook/src/epiops/codebase-runner.mts` is the shared
+codebase-family dispatch boundary. Ulysses preserves the existing live kernel loop; Theseus,
+Hephaestus, and Ariadne have protocol-specific prompts, gate semantics, typed cells, and packets
+persisted through `ExecutionResult.packet` and rendered in PR bodies.
 
 ### Phase 7 — Git/GitHub robustness
 

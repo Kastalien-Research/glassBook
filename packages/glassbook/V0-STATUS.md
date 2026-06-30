@@ -6,6 +6,10 @@ Snapshot of what is and isn't operational after the v0 build pass.
 - **Branch:** `feat/glassbook-v0`
 - **Package:** `@kastalien-research/glassbook` (`packages/glassbook`)
 - **Validated by:** one full live run (root-cause-and-fix on a throwaway repo, real GitHub PR). The pipeline produced a correct minimal fix, an adversarial approval, and an opened PR.
+- **Current follow-up:** `feat/complete-codebase-protocols` adds protocol-specific work-execution
+  dispatch and packets for Theseus, Hephaestus, and Ariadne; see `UNFINISHED.md` for current
+  verification status. Latest package checks are green, but current-code Hephaestus/Ariadne live
+  proofs still require a usable provider credential.
 
 **Legend:** ✅ operational · 🟡 partial / simplified · 🟥 stub / not implemented
 
@@ -55,6 +59,10 @@ The conceptual core is implemented; several spec details from `workflows/ulysses
 - ✅ **workPlan** (`src/sections/work-plan.mts`): chooses among the codebase protocol family
   (`ulysses`, `theseus`, `hephaestus`, `ariadne`) and includes markdown-derived entities,
   behavior/evaluator schema, transitions, and packet schema in the planner prompt.
+- ✅ **workExecution** (`src/sections/work-execution.mts`): dispatches the chosen codebase-family
+  protocol through `epiops/codebase-runner.mts`. Ulysses preserves its live root-cause-and-fix loop;
+  Theseus emits transformation/equivalence packets, Hephaestus emits reproduction packets, and
+  Ariadne runs read-only topology discovery with a topology packet.
 - 🟡 **evaluation** (`src/sections/evaluation.mts`): real adversarial review, but uses the **same model** as the worker (no stronger reviewer model) and is not sandboxed.
 
 ### 2.3 Gate conditions (design component #1)
@@ -108,7 +116,7 @@ The conceptual core is implemented; several spec details from `workflows/ulysses
 - ✅ Pre-existing branch names are handled by suffixing. Stale remote pushes fetch/rebase/retry,
   and rebase conflicts return a clear GitError.
 - ✅ PR body is generated from run state: gates, research, execution, evaluation, checkpoints,
-  kernel turns, typed cells, and usage.
+  kernel turns, typed cells, protocol packet details, and usage.
 
 ### 2.9 Config / env / models
 
@@ -139,8 +147,10 @@ The conceptual core is implemented; several spec details from `workflows/ulysses
 
 ### 2.12 Tests / CI
 
-- 🟥 **No automated tests** for the `glassbook` package (no vitest suite). Validated only via the manual live run.
-- 🟥 No CI wiring for the new package.
+- ✅ Automated vitest coverage exists for gates, tools, git helpers, PR rendering, replay,
+  notebook runtime, Effect boundary, Ulysses, protocol registry/source parsing, and work-execution
+  dispatch.
+- ✅ CI wiring exists for the package; see `UNFINISHED.md` for the latest CI verification notes.
 
 ---
 
@@ -160,6 +170,8 @@ The conceptual core is implemented; several spec details from `workflows/ulysses
 3. Replay tooling that consumes `glassbook.json` (re-run notebook / re-run evaluation).
 4. Separate (stronger) reviewer model; per-role model selection.
 5. Real fan-out research (multiple cells up to budget).
-6. A vitest suite for the engine (gate runner, Ulysses loop, emitter) + CI.
-7. Quiet/headless mode for `@srcbook/api` to silence the session-scan noise.
-8. Effect-TS refactor of the failure model and section signatures.
+6. Complete current-code live `--skip-pr` verification for Hephaestus and Ariadne once provider
+   credentials are repaired.
+7. Decide whether non-codebase protocols (Hermes, Minos, Cassandra, Janus) should enter scope.
+8. Keep protocol packets evolving from deterministic summaries toward richer source-derived
+   schemas as new workflows demand them.
