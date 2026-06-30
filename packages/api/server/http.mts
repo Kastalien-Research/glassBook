@@ -38,6 +38,7 @@ import { isSrcmdPath } from '../srcmd/paths.mjs';
 import { mcpServer, activeHttpTransports } from '../mcp/server.mjs';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { randomUUID } from 'node:crypto';
+import { requireMcpBearerToken } from './mcp-auth.mjs';
 import { requireLocalMcpRequest } from './mcp-local-only.mjs';
 
 const app: Application = express();
@@ -398,8 +399,8 @@ router.post('/subscribe', cors(), async (req, res) => {
 });
 
 // Streamable HTTP Model Context Protocol (MCP) server endpoint
-router.options('/mcp', requireLocalMcpRequest, cors());
-router.all('/mcp', requireLocalMcpRequest, cors(), async (req, res) => {
+router.options('/mcp', requireLocalMcpRequest, requireMcpBearerToken, cors());
+router.all('/mcp', requireLocalMcpRequest, requireMcpBearerToken, cors(), async (req, res) => {
   const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
   let transport = sessionId ? activeHttpTransports.get(sessionId) : undefined;
