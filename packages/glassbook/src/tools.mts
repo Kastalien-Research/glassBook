@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import os from 'node:os';
 import Path from 'node:path';
 import { tool } from 'ai';
 import { z } from 'zod';
@@ -24,10 +25,21 @@ const SANDBOX_EXEC = '/usr/bin/sandbox-exec';
 
 export function isShellSandboxAvailable(): boolean {
   if (!existsSync(SANDBOX_EXEC)) return false;
-  const probe = spawnSync(SANDBOX_EXEC, ['-p', '(version 1)\n(allow default)', 'true'], {
-    stdio: 'ignore',
-  });
-  return probe.status === 0;
+  const probeDir = mkdtempSync(Path.join(os.tmpdir(), 'glassbook-sandbox-probe-'));
+  try {
+    const probe = spawnSync(
+      SANDBOX_EXEC,
+      ['-p', shellSandboxProfile(probeDir), 'bash', '-lc', 'true'],
+      {
+        cwd: probeDir,
+        env: defaultShellEnv(),
+        stdio: 'ignore',
+      },
+    );
+    return probe.status === 0;
+  } finally {
+    rmSync(probeDir, { recursive: true, force: true });
+  }
 }
 
 function defaultShellEnv(): NodeJS.ProcessEnv {
@@ -110,7 +122,7 @@ function shellArgs(command: string, cwd: string, sandboxed: boolean): string[] {
 }
 
 function shellSandboxProfile(repoDir: string): string {
-  const repo = Path.resolve(repoDir);
+  const repo = realpathSync(repoDir);
   return [
     '(version 1)',
     '(deny default)',

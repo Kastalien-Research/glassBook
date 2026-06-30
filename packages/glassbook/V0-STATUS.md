@@ -153,6 +153,8 @@ The conceptual core is implemented; several spec details from `workflows/ulysses
 - ✅ Automated vitest coverage exists for gates, tools, git helpers, PR rendering, replay,
   notebook runtime, Effect boundary, Ulysses, protocol registry/source parsing, and work-execution
   dispatch.
+- ✅ Root `pnpm test` is CI-safe: `@srcbook/api` uses `vitest run`, with watch mode preserved as
+  `pnpm --filter @srcbook/api test:watch`.
 - ✅ CI wiring exists for the package; see `UNFINISHED.md` for the latest CI verification notes.
 
 ---
