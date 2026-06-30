@@ -23,12 +23,35 @@ describe('protocol registry', () => {
   it('emits typed packets for every codebase protocol', async () => {
     const packets = await Promise.all(listProtocols().map((protocol) => protocol.emit({})));
 
-    expect(packets).toEqual([
-      { protocol: 'ulysses', packet: 'fix', resolved: false, checkpoints: [] },
-      { protocol: 'theseus', packet: 'transformation', invariants: [], equivalent: false },
-      { protocol: 'hephaestus', packet: 'reproduction', reproducer: '', minimized: false },
-      { protocol: 'ariadne', packet: 'topology', nodes: [], edges: [] },
+    expect(packets.map((packet) => packet.protocol)).toEqual([
+      'ulysses',
+      'theseus',
+      'hephaestus',
+      'ariadne',
     ]);
+
+    const theseus = packets.find((packet) => packet.protocol === 'theseus');
+    const hephaestus = packets.find((packet) => packet.protocol === 'hephaestus');
+    const ariadne = packets.find((packet) => packet.protocol === 'ariadne');
+
+    expect(theseus).toMatchObject({
+      protocol: 'theseus',
+      packet: 'transformation',
+      equivalent: expect.any(Boolean),
+    });
+    expect(hephaestus).toMatchObject({
+      protocol: 'hephaestus',
+      packet: 'reproduction',
+      minimized: expect.any(Boolean),
+    });
+    expect(ariadne).toMatchObject({ protocol: 'ariadne', packet: 'topology' });
+
+    expect(theseus?.invariants.length).toBeGreaterThan(0);
+    expect(theseus?.evaluatorSuite.length).toBeGreaterThan(0);
+    expect(hephaestus?.reproducer).not.toBe('');
+    expect(hephaestus?.failureOracle).not.toBe('');
+    expect(ariadne?.nodes.length).toBeGreaterThan(0);
+    expect(ariadne?.unknowns.length).toBeGreaterThan(0);
   });
 });
 

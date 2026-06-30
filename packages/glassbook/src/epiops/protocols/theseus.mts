@@ -19,6 +19,16 @@ export const theseusProtocol: CodebaseProtocol = {
     return consideration('theseus', entities);
   },
   async emit(): Promise<TheseusPacket> {
-    return { protocol: 'theseus', packet: 'transformation', invariants: [], equivalent: false };
+    return {
+      protocol: 'theseus',
+      packet: 'transformation',
+      objective: 'Transform the codebase while preserving externally observable identity.',
+      invariants: ['baseline gates continue to pass after each accepted transformation slice'],
+      acceptedChanges: ['small transformation slices are accepted only after invariant gates pass'],
+      evaluatorSuite: ['baseline gates', 'equivalence/final gates'],
+      equivalent: false,
+      rollbackPlan: 'Restore the last checkpoint or revert the protocol branch merge commit.',
+      remainingRisks: ['No live Theseus run evidence was provided to this static packet emitter.'],
+    };
   },
 };

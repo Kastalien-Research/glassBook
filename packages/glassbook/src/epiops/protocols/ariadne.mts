@@ -19,6 +19,18 @@ export const ariadneProtocol: CodebaseProtocol = {
     return consideration('ariadne', entities);
   },
   async emit(): Promise<AriadnePacket> {
-    return { protocol: 'ariadne', packet: 'topology', nodes: [], edges: [] };
+    return {
+      protocol: 'ariadne',
+      packet: 'topology',
+      targetIntervention: 'Map the topology needed before a codebase intervention is safe.',
+      nodes: ['target repository', 'requested intervention surface'],
+      edges: [['requested intervention surface', 'target repository']],
+      contracts: ['topology claims require cited evidence'],
+      unknowns: ['No live discovery evidence was provided to this static packet emitter.'],
+      hiddenCouplings: [],
+      safeInterventionSurfaces: [],
+      riskyInterventionSurfaces: ['surfaces with unresolved topology unknowns'],
+      recommendedChecks: ['run a protocol-specific verification workflow before intervening'],
+    };
   },
 };

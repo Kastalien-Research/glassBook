@@ -19,6 +19,14 @@ export const ulyssesProtocol: CodebaseProtocol = {
     return consideration('ulysses', entities);
   },
   async emit(): Promise<UlyssesPacket> {
-    return { protocol: 'ulysses', packet: 'fix', resolved: false, checkpoints: [] };
+    return {
+      protocol: 'ulysses',
+      packet: 'fix',
+      objective: 'Restore the requested desired state in the codebase.',
+      resolved: false,
+      checkpoints: [],
+      gates: ['final verification gates'],
+      evidence: 'No live Ulysses run evidence was provided to this static packet emitter.',
+    };
   },
 };
