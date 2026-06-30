@@ -330,10 +330,7 @@ const ariadneAdapter: CodebaseProtocolAdapter = {
 
 function makeAriadnePacket(ctx: SectionContext, plan: Plan): AriadnePacket {
   const topology = scanCodebaseTopology(ctx.repoDir);
-  const unknowns =
-    (ctx.state.research?.unknowableBeforeWork.length ?? 0) > 0
-      ? (ctx.state.research?.unknowableBeforeWork ?? [])
-      : ['No unresolved topology unknowns were identified before execution.'];
+  const unknowns = topologyUnknowns(ctx.state.research?.unknowableBeforeWork ?? []);
   return {
     protocol: 'ariadne',
     packet: 'topology',
@@ -347,6 +344,15 @@ function makeAriadnePacket(ctx: SectionContext, plan: Plan): AriadnePacket {
     riskyInterventionSurfaces: topology.riskySurfaces,
     recommendedChecks: gateCommands(plan),
   };
+}
+
+function topologyUnknowns(researchUnknowns: readonly string[]): string[] {
+  const filtered = researchUnknowns.filter(
+    (unknown) => !/glassbook\.json|sidecar|topology packet/i.test(unknown),
+  );
+  return filtered.length > 0
+    ? filtered
+    : ['No unresolved target-codebase topology unknowns were identified before execution.'];
 }
 
 function scanCodebaseTopology(repoDir: string): {

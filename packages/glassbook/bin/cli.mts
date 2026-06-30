@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import { Command } from 'commander';
 import { runGlassbook } from '../src/orchestrator.mjs';
 import { createLogger } from '../src/logger.mjs';
+import { formatRunSummary } from '../src/cli-output.mjs';
 import { getTemplate, codebaseUpdateTemplate } from '../src/templates/codebase-update.mjs';
 import { replayRun } from '../src/replay.mjs';
 import type { RunConfig } from '../src/types.mjs';
@@ -149,12 +150,21 @@ program
     if (envPath) logger.info(`env: ${envPath}`);
     try {
       const result = await runGlassbook(config, logger);
-      logger.info(`\nNotebook: ${result.notebookDir}`);
-      if (result.srcmdPath) logger.info(`Exported: ${result.srcmdPath}`);
-      if (result.pullRequestUrl) logger.info(`PR: ${result.pullRequestUrl}`);
+      if (opts.quiet) {
+        process.stdout.write(`${formatRunSummary(result)}\n`);
+      } else {
+        logger.info(`\nNotebook: ${result.notebookDir}`);
+        if (result.srcmdPath) logger.info(`Exported: ${result.srcmdPath}`);
+        if (result.pullRequestUrl) logger.info(`PR: ${result.pullRequestUrl}`);
+      }
       process.exit(result.ok ? 0 : 1);
     } catch (e) {
-      logger.error(`unexpected error: ${e instanceof Error ? e.message : String(e)}`);
+      const message = `unexpected error: ${e instanceof Error ? e.message : String(e)}`;
+      if (opts.quiet) {
+        process.stderr.write(`${message}\n`);
+      } else {
+        logger.error(message);
+      }
       process.exit(1);
     }
   });

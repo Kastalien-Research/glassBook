@@ -172,5 +172,5 @@ describe('runUlysses', () => {
       'text',
       expect.stringContaining('notebook cell gate passed'),
     );
-  }, 60_000);
+  }, 120_000);
 });

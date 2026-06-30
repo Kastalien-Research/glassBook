@@ -228,6 +228,14 @@ describe('runWorkExecution', () => {
 
   it('runs Ariadne with read-only tooling and emits topology metadata', async () => {
     const ctx = makeContext('ariadne');
+    ctx.state.research = {
+      summary: 'topology research',
+      questionsAnswered: [],
+      unknowableBeforeWork: [
+        'The glassbook.json sidecar topology packet format is unknown before execution.',
+        'Runtime plugin wiring remains unknown.',
+      ],
+    };
     const result = await runWorkExecution(ctx, plan, makeWorkPlan('ariadne'));
 
     expect(result.ok).toBe(true);
@@ -243,6 +251,7 @@ describe('runWorkExecution', () => {
         packet: 'topology',
         targetIntervention: plan.goal,
         contracts: plan.successCriteria,
+        unknowns: ['Runtime plugin wiring remains unknown.'],
         recommendedChecks: ['npm test'],
       });
     }
