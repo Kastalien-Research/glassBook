@@ -80,6 +80,11 @@ interface CommonArgs {
   modelTimeoutMs?: number;
 }
 
+export interface PlanSubagentOutput<T> {
+  readonly output: T;
+  readonly usage?: TokenUsageLike;
+}
+
 /**
  * Planning subagent: produces a schema-validated structured object. Used by the
  * Initialize and Work Plan sections, and to synthesize structured outputs from
@@ -93,6 +98,19 @@ export async function runPlanSubagent<T>(
     schemaName?: string;
   } & CommonArgs,
 ): Promise<Result<T>> {
+  const result = await runPlanSubagentDetailed(args);
+  if (!result.ok) return err(result.error);
+  return ok(result.value.output);
+}
+
+export async function runPlanSubagentDetailed<T>(
+  args: {
+    system: string;
+    prompt: string;
+    schema: z.ZodType<T>;
+    schemaName?: string;
+  } & CommonArgs,
+): Promise<Result<PlanSubagentOutput<T>>> {
   try {
     const model = await getModel({ model: resolveModelId(args.role) });
     const result = await withRetry(
@@ -110,8 +128,9 @@ export async function runPlanSubagent<T>(
         ),
       { retries: args.retries },
     );
-    args.meter?.record(args.role ?? 'planner', result.usage as TokenUsageLike);
-    return ok(result.output as T);
+    const usage = result.usage as TokenUsageLike;
+    args.meter?.record(args.role ?? 'planner', usage);
+    return ok({ output: result.output as T, usage });
   } catch (e) {
     return err(makeError('SubagentError', `planning subagent failed: ${msg(e)}`, e));
   }

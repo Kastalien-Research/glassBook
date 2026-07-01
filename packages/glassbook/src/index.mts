@@ -8,3 +8,4 @@ export {
 } from './templates/codebase-update.mjs';
 export * from './types.mjs';
 export * from './schemas.mjs';
+export * from './recursive-context.mjs';

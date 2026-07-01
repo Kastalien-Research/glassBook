@@ -78,6 +78,9 @@ export function buildPrBody(state: GlassbookState): string {
     `\n**Checkpoints:** ${state.checkpoints.length}`,
     state.kernelTurns ? `\n**Kernel turns:** ${state.kernelTurns.length}` : '',
     `\n**Typed cells:** ${state.glassbookCells.length}`,
+    state.recursiveContextCalls.length
+      ? `\n**Recursive context calls:** ${state.recursiveContextCalls.length}`
+      : '',
     usageLine(state) ? `\n${usageLine(state)}` : '',
     '',
     '_This PR was produced by a glassBook notebook-agent. The full audit notebook is available as a .src.md (openable in Srcbook)._',

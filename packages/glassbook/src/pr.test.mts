@@ -114,6 +114,47 @@ describe('buildPrBody', () => {
     expect(body).toContain('**Usage:** 2 call(s), 30 tokens');
   });
 
+  it('renders recursive context call counts when present', () => {
+    const s = baseState();
+    s.recursiveContextCalls.push({
+      parentCellId: 'research-cell',
+      depth: 1,
+      question: 'What did the prior notebook conclude?',
+      refs: [
+        {
+          id: 'notebook:abc123',
+          kind: 'notebook',
+          sourcePath: '/tmp/prior.src.md',
+          contentHash: 'abc123',
+        },
+      ],
+      selectedSpans: [
+        {
+          spanId: 'notebook:abc123:L2-L4',
+          refId: 'notebook:abc123',
+          sourcePath: '/tmp/prior.src.md',
+          startLine: 2,
+          endLine: 4,
+          text: 'Prior conclusion',
+        },
+      ],
+      answer: 'Prior conclusion',
+      citations: [
+        {
+          refId: 'notebook:abc123',
+          sourcePath: '/tmp/prior.src.md',
+          startLine: 2,
+          endLine: 4,
+        },
+      ],
+      status: 'ok',
+    });
+
+    const body = buildPrBody(s);
+
+    expect(body).toContain('**Recursive context calls:** 1');
+  });
+
   it('renders protocol packet details when execution emits a packet', () => {
     const s = baseState();
     s.execution = {

@@ -92,6 +92,7 @@ function serializeState(state: GlassbookState) {
     kernelTurns: state.kernelTurns,
     forbiddenBehaviors: state.forbiddenBehaviors,
     glassbookCells: state.glassbookCells,
+    recursiveContextCalls: state.recursiveContextCalls,
     workingBranch: state.workingBranch,
     pullRequestUrl: state.pullRequestUrl,
     usage: state.usage,

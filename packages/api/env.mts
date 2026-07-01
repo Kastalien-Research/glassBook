@@ -5,15 +5,35 @@ import Path from 'node:path';
 export function loadEnv(explicit?: string): string | undefined {
   const candidates = explicit
     ? [Path.resolve(explicit)]
-    : [Path.resolve(process.cwd(), '.env'), Path.join(os.homedir(), '.srcbook', '.env')];
+    : [...envCandidatesFromCwd(process.cwd()), Path.join(os.homedir(), '.srcbook', '.env')];
 
-  for (const candidate of candidates) {
+  for (const candidate of unique(candidates)) {
     if (fs.existsSync(candidate)) {
       loadEnvFile(candidate);
       return candidate;
     }
   }
   return undefined;
+}
+
+function envCandidatesFromCwd(cwd: string): string[] {
+  const candidates: string[] = [];
+  let current = Path.resolve(cwd);
+
+  // `pnpm --filter @srcbook/api dev` runs from packages/api, while local config
+  // normally lives at the workspace root. Search a bounded ancestor window.
+  for (let depth = 0; depth < 6; depth += 1) {
+    candidates.push(Path.join(current, '.env'));
+    const parent = Path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+
+  return candidates;
+}
+
+function unique(values: readonly string[]): string[] {
+  return [...new Set(values)];
 }
 
 function loadEnvFile(path: string): void {

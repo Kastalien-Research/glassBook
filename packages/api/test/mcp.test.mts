@@ -90,6 +90,52 @@ const mocks = vi.hoisted(() => {
       stdout(Buffer.from('ok\n'));
       onExit(0);
     }),
+    listGlassbookContexts: vi.fn(async () => [
+      {
+        id: 'glassbook-run',
+        notebookDir: '/tmp/srcbooks/glassbook-run',
+        prompt: 'fix bug',
+        sidecarHash: 'hash',
+        recursiveContextCallCount: 1,
+        executionStatus: true,
+        evaluationStatus: 'approve',
+      },
+    ]),
+    readGlassbookContext: vi.fn(async () => ({
+      summary: {
+        id: 'glassbook-run',
+        notebookDir: '/tmp/srcbooks/glassbook-run',
+        sidecarHash: 'hash',
+        recursiveContextCallCount: 1,
+      },
+      refs: [],
+    })),
+    askGlassbookContext: vi.fn(async () => ({
+      status: 'ok',
+      answer: 'approved',
+      citations: [
+        {
+          refId: 'ref',
+          sourcePath: '/tmp/srcbooks/glassbook-run/glassbook.json',
+          startLine: 1,
+          endLine: 3,
+        },
+      ],
+      selectedSpans: [],
+    })),
+    executeGlassbookContext: vi.fn(async () => ({
+      exitCode: 0,
+      stdout: 'ok\n',
+      stderr: '',
+      selectedSpans: [],
+      audit: {
+        notebookId: 'glassbook-run',
+        scratchpadDir: '/tmp/srcbooks/scratchpad',
+        language: 'javascript',
+        contextFiles: ['/tmp/srcbooks/scratchpad/glassbook-context.json'],
+        sandboxed: true,
+      },
+    })),
     reset: () => {
       counter = 0;
       sessions.clear();
@@ -120,7 +166,14 @@ vi.mock('../exec.mjs', () => ({
   tsx: mocks.execTsx,
 }));
 
-import { mcpServer } from '../mcp/server.mjs';
+vi.mock('../mcp/glassbook-context.mjs', () => ({
+  listGlassbookContexts: mocks.listGlassbookContexts,
+  readGlassbookContext: mocks.readGlassbookContext,
+  askGlassbookContext: mocks.askGlassbookContext,
+  executeGlassbookContext: mocks.executeGlassbookContext,
+}));
+
+import { createMcpServer, mcpServer } from '../mcp/server.mjs';
 import { mcpClientManager } from '../mcp/client.mjs';
 
 async function callTool(name: string, args: any) {
@@ -155,11 +208,32 @@ describe('MCP Server', () => {
     expect(toolNames).toContain('run-cell');
     expect(toolNames).toContain('delete-srcbook');
     expect(toolNames).toContain('execute-code');
+    expect(toolNames).toContain('list-glassbook-contexts');
+    expect(toolNames).toContain('read-glassbook-context');
+    expect(toolNames).toContain('ask-glassbook-context');
+    expect(toolNames).toContain('execute-glassbook-context');
   });
 
-  it('registers notebook readme resource', async () => {
+  it('registers notebook readme and glassBook context resources', async () => {
     const templateNames = Object.keys((mcpServer as any)._registeredResourceTemplates);
     expect(templateNames).toContain('notebook-readme');
+    expect(templateNames).toContain('glassbook-context');
+  });
+
+  it('creates fresh registered MCP servers for HTTP transports', async () => {
+    const freshServer = createMcpServer();
+
+    expect(freshServer).not.toBe(mcpServer);
+    expect(Object.keys((freshServer as any)._registeredTools)).toEqual(
+      expect.arrayContaining([
+        'list-srcbooks',
+        'list-glassbook-contexts',
+        'execute-glassbook-context',
+      ]),
+    );
+    expect(Object.keys((freshServer as any)._registeredResourceTemplates)).toEqual(
+      expect.arrayContaining(['notebook-readme', 'glassbook-context']),
+    );
   });
 
   it('registers solve-problem prompt', async () => {
@@ -192,6 +266,46 @@ describe('MCP Server', () => {
       1,
     );
     expect(result).toMatchObject({ exitCode: 0, stdout: 'ok\n' });
+  });
+
+  it('projects saved glassBook contexts through dedicated MCP tools', async () => {
+    const listed = parseToolJson(await callTool('list-glassbook-contexts', {}));
+    expect(listed[0]).toMatchObject({ id: 'glassbook-run', recursiveContextCallCount: 1 });
+
+    const read = parseToolJson(await callTool('read-glassbook-context', { id: 'glassbook-run' }));
+    expect(read.summary).toMatchObject({ id: 'glassbook-run', sidecarHash: 'hash' });
+    expect(mocks.readGlassbookContext).toHaveBeenCalledWith({
+      id: 'glassbook-run',
+      includeSidecar: true,
+      includeNotebook: true,
+    });
+
+    const answer = parseToolJson(
+      await callTool('ask-glassbook-context', {
+        id: 'glassbook-run',
+        question: 'What happened?',
+      }),
+    );
+    expect(answer).toMatchObject({ status: 'ok', answer: 'approved' });
+
+    const executed = parseToolJson(
+      await callTool('execute-glassbook-context', {
+        id: 'glassbook-run',
+        language: 'javascript',
+        code: 'console.log("ok")',
+      }),
+    );
+    expect(executed).toMatchObject({
+      exitCode: 0,
+      audit: { notebookId: 'glassbook-run', sandboxed: true },
+    });
+    expect(mocks.executeGlassbookContext).toHaveBeenCalledWith({
+      id: 'glassbook-run',
+      language: 'javascript',
+      code: 'console.log("ok")',
+      selectors: undefined,
+      timeoutMs: undefined,
+    });
   });
 
   it('stores added markdown cell content in text', async () => {

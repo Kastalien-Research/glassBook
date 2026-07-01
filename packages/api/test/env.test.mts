@@ -41,6 +41,19 @@ describe('loadEnv', () => {
     expect(process.env[ENV_KEY]).toBe('from-cwd');
   });
 
+  it('loads a workspace ancestor .env when running from a package directory', async () => {
+    const envPath = Path.join(dir, '.env');
+    const packageDir = Path.join(dir, 'packages', 'api');
+    fs.mkdirSync(packageDir, { recursive: true });
+    fs.writeFileSync(envPath, `${ENV_KEY}=from-workspace-root\n`);
+    process.chdir(packageDir);
+
+    const { loadEnv } = await import('../env.mjs');
+
+    expect(fs.realpathSync(loadEnv() ?? '')).toBe(fs.realpathSync(envPath));
+    expect(process.env[ENV_KEY]).toBe('from-workspace-root');
+  });
+
   it('prefers an explicit env file over cwd .env', async () => {
     const explicitPath = Path.join(dir, 'explicit.env');
     fs.writeFileSync(Path.join(dir, '.env'), `${ENV_KEY}=from-cwd\n`);
