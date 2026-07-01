@@ -165,10 +165,22 @@ export function selectContextSpans(args: {
     const maxCharsPerSpan = selector.maxCharsPerSpan ?? DEFAULT_MAX_CHARS_PER_SPAN;
     for (const doc of args.refs) {
       if (spans.length >= maxSpans) break;
+      if (!matchesCellIds(doc.ref, selector.cellIds)) continue;
       spans.push(...selectFromDocument(doc, selector, maxSpans - spans.length, maxCharsPerSpan));
     }
   }
   return spans;
+}
+
+/** A cellIds filter matches only refs that declare an overlapping cell id; refs with no
+ * declared cellIds are excluded rather than included by default, so a caller-supplied
+ * filter can't be silently widened to the whole document set. */
+function matchesCellIds(
+  ref: NotebookContextRef,
+  cellIds: readonly string[] | undefined,
+): boolean {
+  if (!cellIds || cellIds.length === 0) return true;
+  return (ref.cellIds ?? []).some((id) => cellIds.includes(id));
 }
 
 export async function askContext(args: AskContextArgs): Promise<Result<RecursiveContextAnswer>> {

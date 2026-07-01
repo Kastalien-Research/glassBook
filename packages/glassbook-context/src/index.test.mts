@@ -60,6 +60,50 @@ describe('recursive context refs', () => {
     expect(spans[0].text.length).toBeLessThanOrEqual(140);
   });
 
+  it('restricts spans to refs matching a cellIds selector', () => {
+    const contentA = '## Cell A\nThe target company changed guidance after the March call.';
+    const contentB = '## Cell B\nThe target company changed guidance after the March call.';
+    const refA = makeNotebookContextRef({
+      kind: 'notebook',
+      sourcePath: '/tmp/cell-a.src.md',
+      content: contentA,
+      cellIds: ['cell-a'],
+    });
+    const refB = makeNotebookContextRef({
+      kind: 'notebook',
+      sourcePath: '/tmp/cell-b.src.md',
+      content: contentB,
+      cellIds: ['cell-b'],
+    });
+
+    const spans = selectContextSpans({
+      refs: [
+        { ref: refA, content: contentA },
+        { ref: refB, content: contentB },
+      ],
+      selectors: [{ query: 'changed guidance', cellIds: ['cell-a'] }],
+    });
+
+    expect(spans.length).toBeGreaterThan(0);
+    expect(spans.every((span) => span.refId === refA.id)).toBe(true);
+  });
+
+  it('excludes refs with no declared cellIds when a cellIds selector is set', () => {
+    const content = 'The target company changed guidance after the March call.';
+    const ref = makeNotebookContextRef({
+      kind: 'notebook',
+      sourcePath: '/tmp/no-cells.src.md',
+      content,
+    });
+
+    const spans = selectContextSpans({
+      refs: [{ ref, content }],
+      selectors: [{ query: 'changed guidance', cellIds: ['cell-a'] }],
+    });
+
+    expect(spans).toHaveLength(0);
+  });
+
   it('selects multiple bounded chunks when no query is provided', () => {
     const content = Array.from(
       { length: 12 },

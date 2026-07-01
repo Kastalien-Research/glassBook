@@ -3,7 +3,7 @@ import { runToolSubagent, runPlanSubagent } from '../subagent.mjs';
 import { makeReadOnlyTools } from '../tools.mjs';
 import { ResearchFindingsSchema, type ResearchFindings, type Plan } from '../schemas.mjs';
 import { consumeBudget, budgetRemaining, type SectionContext } from '../context.mjs';
-import { ok, type Result } from '../types.mjs';
+import { err, makeError, ok, type Result } from '../types.mjs';
 import {
   askContext,
   makeNotebookContextRef,
@@ -49,8 +49,12 @@ export async function runResearch(
   const { state, emitter, logger } = ctx;
   logger.section('3 · Research');
 
+  const budget = budgetRemaining(state, 'research');
+  if (budget <= 0) {
+    return err(makeError('BudgetExceeded', 'research section has no remaining cell budget'));
+  }
+
   const tools = makeReadOnlyTools(ctx.repoDir);
-  const budget = Math.max(1, budgetRemaining(state, 'research'));
   const recursiveContextEnabled = budget > 1;
   const investigationBudget = recursiveContextEnabled ? budget - 1 : budget;
 

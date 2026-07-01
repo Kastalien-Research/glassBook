@@ -190,4 +190,17 @@ describe('runResearch recursive context', () => {
     });
     expect(result.value.findings.summary).toContain('Recursive context failed');
   });
+
+  it('fails fast with BudgetExceeded when the research budget is already exhausted', async () => {
+    const ctx = makeContext();
+    ctx.state.budgets.research.used = ctx.state.budgets.research.limit;
+
+    const result = await runResearch(ctx, plan);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error._tag).toBe('BudgetExceeded');
+    expect(mocks.runPlanSubagent).not.toHaveBeenCalled();
+    expect(mocks.runToolSubagent).not.toHaveBeenCalled();
+  });
 });
